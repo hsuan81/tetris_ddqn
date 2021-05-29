@@ -19,6 +19,8 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
 # RUN if [ -f "/tmp/conda-tmp/environment.yml" ]; then /opt/conda/bin/conda env update -n base -f /tmp/conda-tmp/environment.yml; fi \
 #     && rm -rf /tmp/conda-tmp
 
+# Intall gym using conda for network testing
+RUN conda install -c conda-forge gym
 
 COPY requirements.txt /tmp/pip-tmp/
 RUN /opt/conda/bin/pip --disable-pip-version-check --no-cache-dir install -r /tmp/pip-tmp/requirements.txt \
