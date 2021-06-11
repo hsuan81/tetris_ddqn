@@ -21,10 +21,14 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
 
 # Intall gym using conda for network testing
 RUN conda install -c conda-forge gym
+RUN apt-get update 
+RUN apt-get install ffmpeg libsm6 libxext6  -y
 
 COPY requirements.txt /tmp/pip-tmp/
 RUN /opt/conda/bin/pip --disable-pip-version-check --no-cache-dir install -r /tmp/pip-tmp/requirements.txt \
    && rm -rf /tmp/pip-tmp
+
+
 
 
 

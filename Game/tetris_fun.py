@@ -179,6 +179,7 @@ class GameState:
         self.lines = 0
         self.height = 0
         self.level, self.fallFreq = self.calculateLevelAndFallFreq()
+        self.actions = 6  # the number of valid actions
 
         self.fallingPiece = self.getNewPiece()
         self.nextPiece = self.getNewPiece()
@@ -206,7 +207,10 @@ class GameState:
         self.frame_step([1,0,0,0,0,0])
         
         pygame.display.update()
-
+    
+    def get_actions(self):
+        # Return the number of valid actions
+        return self.actions
         
     def frame_step(self,input):
         self.movingLeft = False
@@ -354,40 +358,40 @@ class GameState:
         else:
             return BOARDHEIGHT - stack_height
             return float(num_blocks) / float(stack_height * BOARDWIDTH)
-    def getReward(self):
-        stack_height = None
-        num_blocks = 0
-        for i in range(0, BOARDHEIGHT):
-            blank_row = True
-            for j in range(0, BOARDWIDTH):
-                if self.board[j][i] != '.':
-                    num_blocks += 1
-                    blank_row = False
-            if not blank_row and stack_height is None:
-                stack_height = BOARDHEIGHT - i
+    # def getReward(self):
+    #     stack_height = None
+    #     num_blocks = 0
+    #     for i in range(0, BOARDHEIGHT):
+    #         blank_row = True
+    #         for j in range(0, BOARDWIDTH):
+    #             if self.board[j][i] != '.':
+    #                 num_blocks += 1
+    #                 blank_row = False
+    #         if not blank_row and stack_height is None:
+    #             stack_height = BOARDHEIGHT - i
                     
-        if stack_height is None:
-            return BOARDHEIGHT
-        else:
-            return BOARDHEIGHT - stack_height
-            return float(num_blocks) / float(stack_height * BOARDWIDTH)
-    def getReward(self):
-        stack_height = None
-        num_blocks = 0
-        for i in range(0, BOARDHEIGHT):
-            blank_row = True
-            for j in range(0, BOARDWIDTH):
-                if self.board[j][i] != '.':
-                    num_blocks += 1
-                    blank_row = False
-            if not blank_row and stack_height is None:
-                stack_height = BOARDHEIGHT - i
+    #     if stack_height is None:
+    #         return BOARDHEIGHT
+    #     else:
+    #         return BOARDHEIGHT - stack_height
+    #         return float(num_blocks) / float(stack_height * BOARDWIDTH)
+    # def getReward(self):
+    #     stack_height = None
+    #     num_blocks = 0
+    #     for i in range(0, BOARDHEIGHT):
+    #         blank_row = True
+    #         for j in range(0, BOARDWIDTH):
+    #             if self.board[j][i] != '.':
+    #                 num_blocks += 1
+    #                 blank_row = False
+    #         if not blank_row and stack_height is None:
+    #             stack_height = BOARDHEIGHT - i
                     
-        if stack_height is None:
-            return BOARDHEIGHT
-        else:
-            return BOARDHEIGHT - stack_height
-            return float(num_blocks) / float(stack_height * BOARDWIDTH)
+    #     if stack_height is None:
+    #         return BOARDHEIGHT
+    #     else:
+    #         return BOARDHEIGHT - stack_height
+    #         return float(num_blocks) / float(stack_height * BOARDWIDTH)
 
     def makeTextObjs(self,text, font, color):
         surf = font.render(text, True, color)
