@@ -327,7 +327,16 @@ class GameState:
             reward = 100 * cleared
 
         image_data = pygame.surfarray.array3d(pygame.display.get_surface())
+        pygame.image.save(pygame.display.get_surface(), "frame.png")
         return image_data, reward, terminal
+
+    def get_pixelscreen(self):
+        return pygame.surfarray.array3d(pygame.display.get_surface())
+    
+    def save_screen(self):
+        # pygame.image.save(window, "frame.png")
+        pygame.image.save(pygame.display.get_surface(), "save_frame.png")
+        # return pygame.display.get_surface()
 
     def getHeight(self):
         stack_height = 0
