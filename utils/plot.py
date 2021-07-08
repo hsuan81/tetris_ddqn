@@ -20,11 +20,16 @@ class VisdomLinePlotter:
         y: y axis value (e.g. epoch loss)
         """
         if var_name not in self.plots:
-            self.plots[var_name] = self.viz.line(X=np.array([x,x]), Y=np.array([y,y]), env=self.env, opts=dict(
+            self.plots[var_name] = self.viz.line([y,y], [x,x], env=self.env, opts=dict(
                 legend=[split_name],
                 title=title_name,
                 xlabel=x_label,
                 ylabel=var_name
             ))
         else:
-            self.viz.line(X=np.array([x]), Y=np.array([y]), env=self.env, win=self.plots[var_name], name=split_name, update = 'append')
+            self.viz.line([y], [x], env=self.env, win=self.plots[var_name], name=split_name, update = 'append')
+
+if __name__ == '__main__':
+    test = VisdomLinePlotter()
+    for i in range(10):
+        test.plot('value', 'function', 'testing', 'loop', i, i*2)

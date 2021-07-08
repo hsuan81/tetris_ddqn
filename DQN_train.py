@@ -9,6 +9,10 @@ from Game.tetris_env import *
 from utils.replay_buffer import ReplayBuffer
 from utils.plot import VisdomLinePlotter
 
+# Solution for error: no available video device
+import os
+os.environ["SDL_VIDEODRIVER"] = "dummy"
+
 EPS_START = 0.9
 EPS_END = 0.05
 EPS_DECAY = 0.001
@@ -120,13 +124,13 @@ def train(env, num_actions, in_channels, memory_size=100000, screen_shape=(84, 8
                 target_q_values = rew_batch + GAMMA * next_qs
                 
                 criterion = nn.MSELoss()
-                loss = criterion(curr_qs, target_q_values.unsqueeze(1))
+                loss = criterion(curr_qs, target_q_values.unsqueeze(1))  # loss is in Tensor type
                 losses.append(loss)
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
 
-                plotter.plot('loss', 'train', 'Loss', 'Batch', batch_update, loss)
+                plotter.plot('loss', 'train', 'Loss', 'Batch', batch_update, float(loss))
                 
                 # Update target net at even interval 
                 if timestep % target_update == 0:
@@ -159,7 +163,7 @@ num_actions = 6
 in_channels = 4  # due to frame stack
 screen_shape = (84, 84)
 
-BATCH_SIZE = 12
+BATCH_SIZE = 64
 GAMMA = 0.999
 EPS_START = 0.9
 EPS_END = 0.05
