@@ -103,6 +103,8 @@ def train(env, num_actions, in_channels, memory_size=100000, screen_shape=(84, 8
             
             # Add extra reward if the agent survive
             score += r_1
+
+            # Tailor reward to guide the agent to survive
             if not terminal:
                 r_1 += 0.1
             
@@ -111,6 +113,10 @@ def train(env, num_actions, in_channels, memory_size=100000, screen_shape=(84, 8
             # print("score", score)
             
             x_t0 = x_t1
+
+            # logger for inspection while training
+            if timestep % 10 == 0:
+                print("timestep", timestep)
             
             
             if memory.can_sample(BATCH_SIZE):
@@ -132,6 +138,9 @@ def train(env, num_actions, in_channels, memory_size=100000, screen_shape=(84, 8
 
                 plotter.plot('loss', 'train', 'Loss', 'Batch', batch_update, float(loss))
                 
+                # logger for inspection while training
+                print("batch", batch_update)
+
                 # Update target net at even interval 
                 if timestep % target_update == 0:
                     target_net.load_state_dict(policy_net.state_dict())
@@ -139,6 +148,8 @@ def train(env, num_actions, in_channels, memory_size=100000, screen_shape=(84, 8
             if terminal:
                 episode_durations.append(timestep)
                 scores.append(score)
+
+                print("score", score)
                 
                 
                 plotter.plot('score', 'train', 'Score', 'episode', episode, score)
