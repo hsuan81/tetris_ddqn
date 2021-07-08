@@ -4,3 +4,4 @@ matplotlib==3.4.2
 opencv-python==4.5.2.52
 pygame==2.0.1
 jupyter
+visdom==0.1.8.9
