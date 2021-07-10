@@ -16,14 +16,16 @@ os.environ["SDL_VIDEODRIVER"] = "dummy"
 EPS_START = 0.9
 EPS_END = 0.05
 EPS_DECAY = 0.001
+SEED = 2021
 
 global plotter
 plotter = VisdomLinePlotter(env_name='DQN training') 
 
 
-def get_action(state, policy_net):
+def get_action(state, policy_net, seed=SEED):
     # Return a number indicating the pos of 1 in the array for a action
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    random.seed(seed)
     steps_done = 0
     sample = random.random()
     eps_threshold = EPS_END + (EPS_START - EPS_END) * \
@@ -167,6 +169,7 @@ def train(env, num_actions, in_channels, memory_size=100000, screen_shape=(84, 8
                             'target_state_dict': target_net.state_dict(),
                             'optimizer_state_dict': optimizer.state_dict(),
                             'loss': loss,
+                            'learning rate': lr,
                             }, "%s/%s_%s_train.pth" % (saving_path, "DQN", episode))   # save for later training
 
 
@@ -183,7 +186,9 @@ TARGET_UPDATE = 100
 FRAMESKIP = 4
 lr = 0.001
 memory_size = 100000
-num_episodes = 50000
+num_episodes = 500000
+check_point = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 
+            3000, 5000, 10000, 50000, 100000, 300000, 500000]
 
 env = TetrisEnv()
 env = TetrisPreprocessing(env, screen_size=84)
@@ -196,5 +201,7 @@ env = FrameStack(env,4)
 # x = env.get_pixelscreen()
 # env.save_screen()
 train(env, num_actions, in_channels, memory_size, screen_shape, 
-    target_update = TARGET_UPDATE, num_episodes=num_episodes, 
-    save_point=[200, 300, 400, 500, 600, 700, 800, 900, 1000])
+    target_update = TARGET_UPDATE, BATCH_SIZE=BATCH_SIZE, GAMMA=GAMMA, 
+    EPS_START=EPS_START, EPS_END=EPS_END, EPS_DECAY=EPS_DECAY, lr=lr, 
+    num_episodes=num_episodes, 
+    save_point=check_point)
