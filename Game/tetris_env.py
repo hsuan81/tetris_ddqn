@@ -218,7 +218,6 @@ class TetrisApp(object):
     def drop(self, manual):
         """ The piece drop automatically if manual is False or drops forcely if True. """
         if not self.gameover and not self.paused:
-            self.score += 1 if manual else 0  # Add one point to score if player drops the piece forcely.
             self.stone_y += 1
             if check_collision(self.board,
                                self.stone,
@@ -262,51 +261,95 @@ class TetrisApp(object):
         """ Reset the game. """
         self.init_game()
 
-    def _clear_lines(self):
+    def _check_height(self):
+        row = self.stone_y + 1
+        col = self.stone_x
+        col_len = len(self.stone[0])
+        cols = []
+
+        # Current stone was placed at the bottom
+        if row + 1 == len(self.board):
+            return row, cols 
+
+        for i in range(col_len):
+            c = col + i
+            if self.board[row][c] != 0:
+                if self.board[row + 1][c] == 0:
+                    cols.append(c)
+                else:
+                    cols = []
+                    break
+        next_row = row + 1
+        return next_row, cols
+        
+        
+
+    def clear_lines(self):
         return self.cl_lines
     
-    def _number_of_holes(self):
+    def number_of_holes(self):
         '''Number of holes in the board (empty square with at least one block above it)'''
         holes = 0
-
+        c = 0
+        real_r, real_cs = self._check_height()
         for col in zip(*self.board):
-            i = 0
+            if c in real_cs:
+                i = real_r
+            else:
+                i = 0
             while i < self.board_height and col[i] == 0:
                 i += 1
             holes += len([x for x in col[i+1:] if x == 0])
+            
+            c += 1
 
         return holes
 
-    def _height(self):
+    def total_height(self):
         '''Sum and maximum height of the board'''
         sum_height = 0
         max_height = 0
         min_height = self.board_height
 
+        c = 0
+        real_r, real_cs = self._check_height()
+
         for col in zip(*self.board):
-            i = 0
+            if c in real_cs:
+                i = real_r
+            else:
+                i = 0
             while i < self.board_height and col[i] == 0:
                 i += 1
-            height = self.board_height - i
+            height = self.board_height - i - 1
             sum_height += height
             if height > max_height:
                 max_height = height
             elif height < min_height:
                 min_height = height
+            c += 1
 
         return sum_height, max_height, min_height
 
-    def _bumpiness(self):
+    def bumpiness(self):
         '''Sum of the differences of heights between pair of columns'''
         total_bumpiness = 0
         max_bumpiness = 0
         min_ys = []
 
+        c = 0
+        real_r, real_cs = self._check_height()
+
         for col in zip(*self.board):
-            i = 0
+            if c in real_cs:
+                i = real_r
+            else:
+                i = 0
             while i < self.board_height and col[i] == 0:
                 i += 1
             min_ys.append(i)
+
+            c += 1
         
         for i in range(len(min_ys) - 1):
             bumpiness = abs(min_ys[i] - min_ys[i+1])
@@ -317,10 +360,10 @@ class TetrisApp(object):
 
     def fitness_reward(self):
         a, b, c, d = -0.51, 0.76, -0.36, -0.18
-        lines = self._clear_lines()
-        holes = self._number_of_holes()
-        agg_height, max_h, min_h = self._height()
-        bumpiness, max_bump = self._bumpiness()
+        lines = self.clear_lines()
+        holes = self.number_of_holes()
+        agg_height, max_h, min_h = self.total_height()
+        bumpiness, max_bump = self.bumpiness()
 
         new_fit = a * agg_height + b * lines + c * holes + d * bumpiness
         rew = new_fit - self.fitness_val
@@ -413,6 +456,7 @@ Press space to continue""" % self.score)
         if action is None:
             self._draw_screen()
         score_0 = self.score
+        # print("score 0", score_0)
         # curr_line = self.lines
         if action is not None:
             self._handle_actions(action)
@@ -420,6 +464,7 @@ Press space to continue""" % self.score)
         pygame.display.update()
         obs = self.get_screenRGB()
         # reward_line = self.lines - curr_line
+        # print("score 1", self.score)
         reward = self.score - score_0
         done = self.is_gameover()
         
@@ -527,6 +572,13 @@ class TetrisEnv(gym.Env):
 
     def fitness_reward(self):
         return self.game.fitness_reward()
+
+    def heuristic_state(self):
+        cl_lines = self.game.clear_lines()
+        holes = self.game.number_of_holes()
+        height, _, _ = self.game.total_height()
+        bumpiness, _ = self.game.bumpiness()
+        return (cl_lines, holes, height, bumpiness)
 
     def step(self, action):
         """ 
@@ -695,6 +747,8 @@ class TetrisPreprocessing(gym.Wrapper):
 
         for t in range(self.frame_skip if self.frame_skip > 0 else 1):
             self.curr_ob, reward, done = self.env.step(action)
+            # print("t reward", reward)
+            # print(self.env.heuristic_state())
             R += reward
             self.game_over = done
 
@@ -780,11 +834,13 @@ if __name__ == '__main__':
             x_t1 = cv2.cvtColor(x_t1, cv2.COLOR_BGR2GRAY)
             ret, x_t1 = cv2.threshold(x_t1,1,255,cv2.THRESH_BINARY)
             x_t1 = np.reshape(x_t1, (288, -1, 1))
-        x_t1 = np.concatenate(list(x_t1), axis=1) 
+            print("no preprocess")
+        print(x_t1.shape)
+        x_t1 = np.concatenate(x_t1, axis=1) 
         cv2.imwrite("framestack" + ".png", x_t1)
         for i in range(10):
             action = game.action_space.sample()
-            # action = 0
+            action = 4
             print("%i action %i" % (i,action))
             x_t2, reward1, done1 = game.step(action)
             print("reward", reward1)
@@ -795,6 +851,8 @@ if __name__ == '__main__':
             # x_t2 = np.reshape(x_t2, (288, -1, 1))
             x_t2 = np.concatenate(list(x_t2), axis=1)
             cv2.imwrite("stackframe" + str(i) + ".png", x_t2)
+            h_state = game.heuristic_state()
+            print(i, h_state)
             if reward1 > 0:
                 print("score", reward1)
             if done1:
@@ -818,13 +876,15 @@ if __name__ == '__main__':
             action = 0
             print("%i action %i" % (i,action))
             ob1, reward1, done1 = game.step(action)
+            h_state = game.heuristic_state()
+            print(i, h_state)
             x_t2 = cv2.cvtColor(ob1, cv2.COLOR_BGR2GRAY)
             # ret, x_t2 = cv2.threshold(x_t2,1,255,cv2.THRESH_BINARY)
             # x_t2 = np.reshape(x_t2, (288, -1, 1))
             cv2.imwrite("frame" + str(i) + ".png", x_t2)
             print(ob1.shape)
             print(game.observation_space.shape)
-            game.render()
+            # game.render()
 
     
 

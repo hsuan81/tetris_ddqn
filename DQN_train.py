@@ -16,16 +16,16 @@ os.environ["SDL_VIDEODRIVER"] = "dummy"
 EPS_START = 0.9
 EPS_END = 0.05
 EPS_DECAY = 0.001
-SEED = 2021
+SEED = 20
 
 global plotter
 plotter = VisdomLinePlotter(env_name='DQN training') 
+random.seed(SEED)
 
 
-def get_action(state, policy_net, seed=SEED):
+def get_action(state, policy_net):
     # Return a number indicating the pos of 1 in the array for a action
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    random.seed(seed)
     steps_done = 0
     sample = random.random()
     eps_threshold = EPS_END + (EPS_START - EPS_END) * \
@@ -42,10 +42,12 @@ def get_action(state, policy_net, seed=SEED):
                 state = state.unsqueeze(0)
             action = policy_net(state.to(device, dtype=torch.float32))
             action = action.max(1)[1]
+            print("net action")
 
             return action
     else:
         action = torch.tensor([random.randint(0, 5)])
+        print("random action")
 
         return action
 
@@ -99,16 +101,23 @@ def train(env, num_actions, in_channels, memory_size=100000, screen_shape=(84, 8
             timestep += 1
             act = get_action(x_t0, policy_net)
             x_t1, r_1, terminal = env.step(int(act))
-            
+            print("ep %i time %i " %(episode, timestep))
+            print("state", env.heuristic_state())
+            print("reward", r_1)
+            print("action", act)
+            x_p = np.concatenate(list(x_t1), axis=1)
+            cv2.imwrite("train_ep" + str(episode) + "time" + str(timestep) + ".png", x_p)
+
+            # Tailor reward to guide the agent to survive
+            if not terminal:
+                r_1 += 1
         
 #             cv2.imwrite("frame"+str(timestep)+".png", x_t1)
             
             # Add extra reward if the agent survive
             score += r_1
 
-            # Tailor reward to guide the agent to survive
-            if not terminal:
-                r_1 += 0.1
+            
             
             memory.push(x_t0, act, r_1, x_t1, terminal)
             
@@ -138,10 +147,11 @@ def train(env, num_actions, in_channels, memory_size=100000, screen_shape=(84, 8
                 loss.backward()
                 optimizer.step()
 
-                plotter.plot('loss', 'train', 'Loss', 'Batch', batch_update, float(loss))
+                # plotter.plot('loss', 'train', 'Loss', 'Batch', batch_update, float(loss))
                 
                 # logger for inspection while training
-                print("batch", batch_update)
+                if batch_update % 100 == 0:
+                    print("batch", batch_update)
 
                 # Update target net at even interval 
                 if timestep % target_update == 0:
@@ -154,7 +164,7 @@ def train(env, num_actions, in_channels, memory_size=100000, screen_shape=(84, 8
                 print("score", score)
                 
                 
-                plotter.plot('score', 'train', 'Score', 'episode', episode, score)
+                # plotter.plot('score', 'train', 'Score', 'episode', episode, score)
                 # plot_results(episode, scores, losses, num_episodes)
                 # plot_durations(episode_durations)
                 break
@@ -184,9 +194,9 @@ EPS_END = 0.05
 EPS_DECAY = 0.001
 TARGET_UPDATE = 100
 FRAMESKIP = 4
-lr = 0.001
+lr = 0.0001
 memory_size = 100000
-num_episodes = 500000
+num_episodes = 10
 check_point = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 
             3000, 5000, 10000, 50000, 100000, 300000, 500000]
 
