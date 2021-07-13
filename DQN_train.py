@@ -202,7 +202,7 @@ check_point = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000,
 
 env = TetrisEnv()
 env = HeuristicReward(env)
-env = TetrisPreprocessing(env, screen_size=84)
+env = TetrisPreprocessing(env, screen_size=84, frame_skip=2)
 env = FrameStack(env,4)
 # env.reset()
 # o, r, d = env.step(1)

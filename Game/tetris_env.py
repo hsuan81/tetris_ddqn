@@ -16,7 +16,7 @@ import pygame, sys
 # The configuration
 cell_size = 18
 cols =      10
-rows =      22
+rows =      12  # standard game row is 22
 maxfps =    30
 
 colors = [
