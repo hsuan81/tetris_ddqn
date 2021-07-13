@@ -42,12 +42,12 @@ def get_action(state, policy_net):
                 state = state.unsqueeze(0)
             action = policy_net(state.to(device, dtype=torch.float32))
             action = action.max(1)[1]
-            print("net action")
+            # print("net action")
 
             return action
     else:
         action = torch.tensor([random.randint(0, 5)])
-        print("random action")
+        # print("random action")
 
         return action
 
@@ -121,7 +121,7 @@ def train(env, num_actions, in_channels, memory_size=100000, screen_shape=(84, 8
             
             memory.push(x_t0, act, r_1, x_t1, terminal)
             
-            # print("score", score)
+            print("score", score)
             
             x_t0 = x_t1
 
@@ -147,7 +147,7 @@ def train(env, num_actions, in_channels, memory_size=100000, screen_shape=(84, 8
                 loss.backward()
                 optimizer.step()
 
-                # plotter.plot('loss', 'train', 'Loss', 'Batch', batch_update, float(loss))
+                plotter.plot('loss', 'train', 'Loss for 10X10', 'Batch', batch_update, float(loss))
                 
                 # logger for inspection while training
                 if batch_update % 100 == 0:
@@ -164,7 +164,7 @@ def train(env, num_actions, in_channels, memory_size=100000, screen_shape=(84, 8
                 print("score", score)
                 
                 
-                # plotter.plot('score', 'train', 'Score', 'episode', episode, score)
+                plotter.plot('score', 'train', 'Score for 10x10', 'episode', episode, score)
                 # plot_results(episode, scores, losses, num_episodes)
                 # plot_durations(episode_durations)
                 break
@@ -196,7 +196,7 @@ TARGET_UPDATE = 100
 FRAMESKIP = 4
 lr = 0.0001
 memory_size = 100000
-num_episodes = 10
+num_episodes = 100000
 check_point = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 
             3000, 5000, 10000, 50000, 100000, 300000, 500000]
 
