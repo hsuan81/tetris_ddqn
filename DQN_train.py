@@ -101,16 +101,15 @@ def train(env, num_actions, in_channels, memory_size=100000, screen_shape=(84, 8
             timestep += 1
             act = get_action(x_t0, policy_net)
             x_t1, r_1, terminal = env.step(int(act))
-            print("ep %i time %i " %(episode, timestep))
-            print("state", env.heuristic_state())
-            print("reward", r_1)
-            print("action", act)
-            x_p = np.concatenate(list(x_t1), axis=1)
-            cv2.imwrite("train_ep" + str(episode) + "time" + str(timestep) + ".png", x_p)
+            # print("ep %i time %i " %(episode, timestep))
+            # print("state", env.heuristic_state())
+            # print("reward", r_1)
+            # print("action", act)
+                
 
             # Tailor reward to guide the agent to survive
-            if not terminal:
-                r_1 += 1
+            # if not terminal:
+            #     r_1 += 1
         
 #             cv2.imwrite("frame"+str(timestep)+".png", x_t1)
             
@@ -121,12 +120,11 @@ def train(env, num_actions, in_channels, memory_size=100000, screen_shape=(84, 8
             
             memory.push(x_t0, act, r_1, x_t1, terminal)
             
-            print("score", score)
             
             x_t0 = x_t1
 
             # logger for inspection while training
-            if timestep % 10 == 0:
+            if timestep % 100 == 0:
                 print("timestep", timestep)
             
             
@@ -161,6 +159,9 @@ def train(env, num_actions, in_channels, memory_size=100000, screen_shape=(84, 8
                 episode_durations.append(timestep)
                 scores.append(score)
 
+                x_p = np.concatenate(list(x_t1), axis=1)
+                cv2.imwrite("train_ep" + str(episode) + "time" + str(timestep) + ".png", x_p)
+                print("ep %i time %i" %(episode, timestep))
                 print("score", score)
                 
                 

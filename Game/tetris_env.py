@@ -359,7 +359,7 @@ class TetrisApp(object):
         return total_bumpiness, max_bumpiness
 
     def fitness_reward(self):
-        a, b, c, d = -0.51, 0.76, -0.36, -0.18
+        a, b, c, d = -0.51, 0.76, -0.18, -0.36
         lines = self.clear_lines()
         holes = self.number_of_holes()
         agg_height, max_h, min_h = self.total_height()
@@ -633,7 +633,7 @@ class HeuristicReward(gym.RewardWrapper):
         return ob, self.reward(reward, fit_rew, done), done
     
     def reward(self, reward, fit_reward, done):
-        done_r = 0 if not done else -1
+        done_r = 1 if not done else -10
         rew = reward + fit_reward + done_r
         return rew
 
