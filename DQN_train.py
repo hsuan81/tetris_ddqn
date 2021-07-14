@@ -87,6 +87,7 @@ def train(env, num_actions, in_channels, memory_size=100000, screen_shape=(84, 8
     
     episode_durations = []
     scores = []
+    rewards = []
     losses = []
     last_screen = []
     timestep = 0
@@ -115,8 +116,12 @@ def train(env, num_actions, in_channels, memory_size=100000, screen_shape=(84, 8
             
             # Add extra reward if the agent survive
             score += r_1
+            rewards.append(r_1)
+            state = env.heuristic_state()
+            cleared_line = state[0]
 
-            
+            plotter.plot('reward', 'train v3', 'Reward for 10X10', 'timestep', timestep, r_1)
+            plotter.plot('cleared line', 'train v3', 'Lines for 10X10', 'timestep', timestep, cleared_line)
             
             memory.push(x_t0, act, r_1, x_t1, terminal)
             
@@ -145,7 +150,7 @@ def train(env, num_actions, in_channels, memory_size=100000, screen_shape=(84, 8
                 loss.backward()
                 optimizer.step()
 
-                plotter.plot('loss', 'train', 'Loss for 10X10', 'Batch', batch_update, float(loss))
+                plotter.plot('loss', 'train v3', 'Loss for 10X10', 'Batch', batch_update, float(loss))
                 
                 # logger for inspection while training
                 if batch_update % 100 == 0:
@@ -165,7 +170,7 @@ def train(env, num_actions, in_channels, memory_size=100000, screen_shape=(84, 8
                 print("score", score)
                 
                 
-                plotter.plot('score', 'train', 'Score for 10x10', 'episode', episode, score)
+                plotter.plot('score', 'train v3', 'Score for 10x10', 'episode', episode, score)
                 # plot_results(episode, scores, losses, num_episodes)
                 # plot_durations(episode_durations)
                 break
@@ -193,7 +198,7 @@ GAMMA = 0.999
 EPS_START = 0.9
 EPS_END = 0.05
 EPS_DECAY = 0.001
-TARGET_UPDATE = 100
+TARGET_UPDATE = 200
 FRAMESKIP = 4
 lr = 0.0001
 memory_size = 100000
@@ -202,7 +207,7 @@ check_point = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000,
             3000, 5000, 10000, 50000, 100000, 300000, 500000]
 
 env = TetrisEnv()
-env = HeuristicReward(env)
+env = HeuristicReward(env, ver=3)
 env = TetrisPreprocessing(env, screen_size=84, frame_skip=2)
 env = FrameStack(env,4)
 # env.reset()

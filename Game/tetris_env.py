@@ -135,6 +135,7 @@ class TetrisApp(object):
         self.lines = 0
         self.cl_lines = 0
         self.fitness_val = 0
+        self.filled = 0  # Grids filled within the 2-row size window
         self.stone_change = False
         self.gameover = False
         self.paused = False
@@ -282,6 +283,26 @@ class TetrisApp(object):
         next_row = row + 1
         return next_row, cols
         
+    def row_window(self, min_h):
+        bottom_r = self.board_height - min_h - 1
+        return self.board[bottom_r - 2 : bottom_r]
+
+    def win_filled(self):
+        _, _, min_h = self.total_height()
+        # print("min h", min_h)
+        win = self.row_window(min_h)
+        # print("window", win)
+        # print("board", self.board)
+        filled = 0
+        for r in win:
+            for i in range(self.board_width):
+                if r[i] != 0:
+                    filled += 1
+
+        # new_filled = filled - self.filled
+        self.filled = filled
+        return filled
+
         
 
     def clear_lines(self):
@@ -358,14 +379,24 @@ class TetrisApp(object):
 
         return total_bumpiness, max_bumpiness
 
-    def fitness_reward(self):
-        a, b, c, d = -0.51, 0.76, -0.18, -0.36
+    def fitness_reward(self, ver=None):
+        a, b, c, d = -0.51, 0.76, -0.36, -0.18
         lines = self.clear_lines()
         holes = self.number_of_holes()
         agg_height, max_h, min_h = self.total_height()
         bumpiness, max_bump = self.bumpiness()
+        space_filled = self.win_filled()
 
-        new_fit = a * agg_height + b * lines + c * holes + d * bumpiness
+        if ver is None:
+            new_fit = a * agg_height + b * lines + c * holes + d * bumpiness
+        elif ver == 1:
+            new_fit = a * agg_height + b * lines + d * holes + c * bumpiness
+        elif ver == 2:
+            d = -0.5
+            new_fit = d * bumpiness
+        elif ver == 3:
+            new_fit = 0.5 * space_filled + a * (max_h - min_h)
+
         rew = new_fit - self.fitness_val
         self.fitness_val = new_fit
         return rew
@@ -570,15 +601,16 @@ class TetrisEnv(gym.Env):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
-    def fitness_reward(self):
-        return self.game.fitness_reward()
+    def fitness_reward(self, ver=None):
+        return self.game.fitness_reward(ver)
 
     def heuristic_state(self):
         cl_lines = self.game.clear_lines()
         holes = self.game.number_of_holes()
         height, _, _ = self.game.total_height()
         bumpiness, _ = self.game.bumpiness()
-        return (cl_lines, holes, height, bumpiness)
+        window_filled = self.game.win_filled()
+        return (cl_lines, holes, height, bumpiness, window_filled)
 
     def step(self, action):
         """ 
@@ -624,16 +656,17 @@ class TetrisEnv(gym.Env):
             self.viewer.imshow(img_rotated)
 
 class HeuristicReward(gym.RewardWrapper):
-    def __init__(self, env):
+    def __init__(self, env, ver=None):
         super().__init__(env)
+        self.ver = ver
 
     def step(self, action):
         ob, reward, done = self.env.step(action)
-        fit_rew = self.env.fitness_reward()
+        fit_rew = self.env.fitness_reward(self.ver)
         return ob, self.reward(reward, fit_rew, done), done
     
     def reward(self, reward, fit_reward, done):
-        done_r = 1 if not done else -10
+        done_r = 0 if not done else -10
         rew = reward + fit_reward + done_r
         return rew
 
@@ -820,8 +853,8 @@ if __name__ == '__main__':
     PREPROCESS = True
     if FRAMESTACK:
         game = TetrisEnv()
-        game = HeuristicReward(game)
-        game = TetrisPreprocessing(game)
+        game = HeuristicReward(game, ver=3)
+        game = TetrisPreprocessing(game, frame_skip=3)
         game = FrameStack(game,4)
         
         print("Test begins")
@@ -840,7 +873,7 @@ if __name__ == '__main__':
         cv2.imwrite("framestack" + ".png", x_t1)
         for i in range(10):
             action = game.action_space.sample()
-            action = 4
+            # action = 4
             print("%i action %i" % (i,action))
             x_t2, reward1, done1 = game.step(action)
             print("reward", reward1)
