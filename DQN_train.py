@@ -5,7 +5,7 @@ import cv2
 from timeit import default_timer as timer
 import torch
 from networks.models import *
-from Game.tetris_env import *
+# from Game.tetris_env import *
 from utils.replay_buffer import ReplayBuffer
 from utils.plot import VisdomLinePlotter
 
@@ -23,7 +23,7 @@ plotter = VisdomLinePlotter(env_name='DQN training')
 random.seed(SEED)
 
 
-def get_action(state, policy_net):
+def get_action(state, policy_net, num_actions=6):
     # Return a number indicating the pos of 1 in the array for a action
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     steps_done = 0
@@ -37,7 +37,8 @@ def get_action(state, policy_net):
             # second column on max result is index of where max element was
             # found, so we pick action with the larger expected reward.
             
-            state = torch.from_numpy(state)
+            if isinstance(state, np.ndarray):
+                state = torch.from_numpy(state)
             if state.ndim < 4:
                 state = state.unsqueeze(0)
             action = policy_net(state.to(device, dtype=torch.float32))
@@ -46,22 +47,30 @@ def get_action(state, policy_net):
 
             return action
     else:
-        action = torch.tensor([random.randint(0, 5)])
+        action = torch.tensor([random.randint(0, num_actions-1)])
         # print("random action")
 
         return action
 
 
-def get_next_qs(target_net, next_obs_batch, done_mask, BATCH_SIZE):
+def get_next_qs(target_net, next_obs_batch, done_mask, BATCH_SIZE, device):
     """
     Return the Q-value of the next state.
     """
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    terminal_ind = torch.nonzero(done_mask)
-    values = target_net(next_obs_batch.to(device)).max(dim=1)[0].detach() 
-    values[terminal_ind] = 0.0
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # terminal_ind = torch.nonzero(done_mask)
+    # values = target_net(next_obs_batch.to(device)).max(dim=1)[0].detach() 
+    # values[terminal_ind] = 0.0
     
-    return values
+    
+    non_final_indx = [i for i in range(len(done_mask)) if done_mask[i] is not True]
+    print("done m", non_final_indx[:8])
+    non_final_next_states = torch.cat([next_obs_batch[i] for i in non_final_indx])
+    # print("next", non_final_next_states[0].shape)
+    next_state_values = torch.zeros(BATCH_SIZE, device=device)
+    next_state_values[non_final_indx] = target_net(non_final_next_states).max(1)[0].detach()
+    
+    return next_state_values
 
 def train(env, num_actions, in_channels, memory_size=100000, screen_shape=(84, 84), target_update=10, 
           BATCH_SIZE=128, GAMMA=0.999, EPS_START=0.9, EPS_END=0.05, EPS_DECAY=0.001, lr=0.001, num_episodes=1000,
@@ -206,10 +215,12 @@ num_episodes = 100000
 check_point = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 
             3000, 5000, 10000, 50000, 100000, 300000, 500000]
 
-env = TetrisEnv()
-env = HeuristicReward(env, ver=3)
-env = TetrisPreprocessing(env, screen_size=84, frame_skip=2)
-env = FrameStack(env,4)
+# env = TetrisEnv()
+# env = HeuristicReward(env, ver=3)
+# env = TetrisPreprocessing(env, screen_size=84, frame_skip=2)
+# env = FrameStack(env,4)
+
+
 # env.reset()
 # o, r, d = env.step(1)
 # print(o, r, d)
@@ -217,8 +228,10 @@ env = FrameStack(env,4)
 # print(y)
 # x = env.get_pixelscreen()
 # env.save_screen()
-train(env, num_actions, in_channels, memory_size, screen_shape, 
-    target_update = TARGET_UPDATE, BATCH_SIZE=BATCH_SIZE, GAMMA=GAMMA, 
-    EPS_START=EPS_START, EPS_END=EPS_END, EPS_DECAY=EPS_DECAY, lr=lr, 
-    num_episodes=num_episodes, 
-    save_point=check_point)
+
+
+# train(env, num_actions, in_channels, memory_size, screen_shape, 
+#     target_update = TARGET_UPDATE, BATCH_SIZE=BATCH_SIZE, GAMMA=GAMMA, 
+#     EPS_START=EPS_START, EPS_END=EPS_END, EPS_DECAY=EPS_DECAY, lr=lr, 
+#     num_episodes=num_episodes, 
+#     save_point=check_point)
