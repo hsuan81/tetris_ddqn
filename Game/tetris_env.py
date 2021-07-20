@@ -420,9 +420,7 @@ class TetrisApp(object):
         # If the action is not no operation, take the action
         if action > 0:
             key_actions[action_type]()
-        
-        if not self.stone_change:
-            self.drop(False)  # piece goes down one step whenever one action(including no operation) was taken
+
         self.stone_change = False
         for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -484,13 +482,14 @@ Press space to continue""" % self.score)
 #                 if self.show_next_stone:
 #                     self.draw_matrix(self.next_stone,
 #                         (cols+1,2))
+        score_0 = self.score
         if action is None:
             self._draw_screen()
-        score_0 = self.score
+        else:
+            self._handle_actions(action)
         # print("score 0", score_0)
         # curr_line = self.lines
-        if action is not None:
-            self._handle_actions(action)
+        
         self._draw_screen()
         pygame.display.update()
         obs = self.get_screenRGB()
@@ -498,7 +497,6 @@ Press space to continue""" % self.score)
         # print("score 1", self.score)
         reward = self.score - score_0
         done = self.is_gameover()
-        
 
         return obs, reward, done
 
@@ -512,8 +510,10 @@ Press space to continue""" % self.score)
     def get_screenRGB(self):
         """ Return current screen in RGB format. """
         # screen = pygame.transform.rotate(screen, 90)
-        return pygame.surfarray.array3d(
-            pygame.display.get_surface()).astype(np.uint8)    
+        screen = pygame.surfarray.array3d(
+            pygame.display.get_surface()).astype(np.uint8)   
+        screen = np.fliplr(np.rot90(screen, 1, (1, 0)))
+        return  screen
 
     def render(self):
         return self.screen
@@ -575,6 +575,7 @@ Press space to continue""" % self.score)
 
             dont_burn_my_cpu.tick(maxfps)
 
+
 # The following code modified from 
 # https://github.com/oscastellanos/gym-traffic/blob/master/gym_traffic/envs/TrEnv.py
 
@@ -592,9 +593,10 @@ class TetrisEnv(gym.Env):
 
     def __init__(self):
         self.game = TetrisApp()
-        self.action_space = spaces.Discrete(5)
+        self.action_space = spaces.Discrete(6)
         self.observation_space = spaces.Box(low=0, high=255,
-        shape=(self.game.width, self.game.height, 3), dtype=np.uint8)
+        shape=(self.game.height, self.game.width, 3), dtype=np.uint8)
+        self.shape = (self.game.height, self.game.width)
         self.viewer = None
 
     def _seed(self, seed=None):
@@ -615,7 +617,7 @@ class TetrisEnv(gym.Env):
     def step(self, action):
         """ 
         IMPORTANT: THE RETURN STATE IS IN PIXEL FORM, NOT NORMAL GYM STATE
-        Return: state (the state before taking the action),
+        Return: state (the state after taking the action): numpy.ndarray,
                 reward,
                 done status (whether the game terminates)
         """
@@ -626,7 +628,9 @@ class TetrisEnv(gym.Env):
     def _get_obs(self):
         return self.game.get_screenRGB()
 
+
     def reset(self):
+        """ Return the current state in pixel form. """
         self.game.reset()
         return self.game.step()[0]
 
@@ -654,6 +658,9 @@ class TetrisEnv(gym.Env):
             if self.viewer is None:
                 self.viewer = rendering.SimpleImageViewer()
             self.viewer.imshow(img_rotated)
+
+    def close(self):
+        self.game.quit()
 
 class HeuristicReward(gym.RewardWrapper):
     def __init__(self, env, ver=None):
@@ -697,14 +704,14 @@ class FrameStack(gym.Wrapper):
     obs = self.env.reset()
     for _ in range(self.n_frames):
         self.frames.append(obs)
-    return self._get_ob()
+    return self._get_obs()
 
   def step(self, action):
     obs, reward, done = self.env.step(action)
     self.frames.append(obs)
-    return self._get_ob(), reward, done
+    return self._get_obs(), reward, done
 
-  def _get_ob(self):
+  def _get_obs(self):
     """ 
     Return:
         numpy array with shape (width, height, 3 * n_frames)
@@ -712,6 +719,32 @@ class FrameStack(gym.Wrapper):
     assert len(self.frames) == self.n_frames
     # np.concatenate(list(self.frames), axis=1)  
     return np.stack(self.frames, axis=0)
+
+class CropObservation(gym.ObservationWrapper):
+    r"""Downsample the image observation to a square image. """
+    def __init__(self, env, shape):
+        super(CropObservation, self).__init__(env)
+        if isinstance(shape, int):
+            shape = (shape, shape)
+        assert all(x > 0 for x in shape), shape
+        self.shape = tuple(shape)
+
+        obs_shape = self.shape + self.observation_space.shape[2:]
+        self.observation_space = spaces.Box(low=0, high=255, shape=obs_shape, dtype=np.uint8)
+
+    # def reset(self, **kwargs):
+    #     observation = self.env.reset(**kwargs)
+    #     return self.observation(observation)
+
+    def step(self, action):
+        observation, reward, done = self.env.step(action)
+        return self.observation(observation), reward, done
+
+    def observation(self, observation):
+        observation = observation[:self.shape[0], :self.shape[1]]
+        if observation.ndim == 2:
+            observation = np.expand_dims(observation, -1)
+        return observation
 
 # Modified from https://github.com/openai/gym/blob/master/gym/wrappers/atari_preprocessing.py
 class TetrisPreprocessing(gym.Wrapper):
@@ -740,10 +773,12 @@ class TetrisPreprocessing(gym.Wrapper):
             grayscale observations to make them 3-dimensional.
         scale_obs (bool): if True, then observation normalized in range [0,1] is returned. It also limits memory
             optimization benefits of FrameStack Wrapper.
+        crop_obs (bool): if True, crop the image to keep necessary observation, otherwise, original observation 
+            is returned
     """
 
     def __init__(self, env, noop_max=0, frame_skip=4, screen_size=84, grayscale_obs=True,
-                 grayscale_newaxis=False, scale_obs=False):
+                 grayscale_newaxis=False, scale_obs=False, crop_obs=True):
         super().__init__(env)
         assert cv2 is not None, \
             "opencv-python package not installed! Try running pip install gym[atari] to get dependencies  for atari"
@@ -757,9 +792,10 @@ class TetrisPreprocessing(gym.Wrapper):
         self.grayscale_obs = grayscale_obs
         self.grayscale_newaxis = grayscale_newaxis
         self.scale_obs = scale_obs
+        self.crop_obs = crop_obs
         self.curr_ob = None
 
-        # buffer of most recent two observations for max pooling
+        # buffer of most recent two observations for max pooling (not using in Tetris case)
         if grayscale_obs:
             self.obs_buffer = [np.empty(env.observation_space.shape[:2], dtype=np.uint8),
                                np.empty(env.observation_space.shape[:2], dtype=np.uint8)]
@@ -821,7 +857,7 @@ class TetrisPreprocessing(gym.Wrapper):
         # if self.frame_skip > 1:  # more efficient in-place pooling
         #     np.maximum(self.obs_buffer[0], self.obs_buffer[1], out=self.obs_buffer[0])
         obs = cv2.resize(self.curr_ob, (self.screen_size, self.screen_size), interpolation=cv2.INTER_AREA)
-
+        
         if self.scale_obs:
             obs = np.asarray(obs, dtype=np.float32) / 255.0
         else:
@@ -853,6 +889,7 @@ if __name__ == '__main__':
     PREPROCESS = True
     if FRAMESTACK:
         game = TetrisEnv()
+        game = CropObservation(game, (216, 200))
         game = HeuristicReward(game, ver=3)
         game = TetrisPreprocessing(game, frame_skip=3)
         game = FrameStack(game,4)
@@ -895,13 +932,14 @@ if __name__ == '__main__':
             
     else:
         game = TetrisEnv()
+        game = CropObservation(game, (216, 216))
         print("Test begins")
         ob = game.reset()
         print(game.observation_space)
         print(ob.shape)
         x_t1 = cv2.cvtColor(ob, cv2.COLOR_BGR2GRAY)
         ret, x_t1 = cv2.threshold(x_t1,1,255,cv2.THRESH_BINARY)
-        x_t1 = np.reshape(x_t1, (288, -1, 1))
+        x_t1 = np.reshape(x_t1, (ob.shape[0], -1, 1))
         cv2.imwrite("frame" + ".png", x_t1)
 
         for i in range(15):

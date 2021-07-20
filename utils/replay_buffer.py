@@ -8,7 +8,7 @@ Transition = namedtuple('Transition',
 
 class ReplayBuffer:
     
-    def __init__(self, device, size, screen_shape=(84, 84), frame_stack=True):
+    def __init__(self, size, screen_shape=(84, 84)):
         self.size = size
         self.screen_shape = screen_shape
         self.num_in_buffer = 0
@@ -61,3 +61,6 @@ class ReplayBuffer:
         return random.sample(self.memory, batch_size)
         
         # return self._encode_sample(inds)
+
+    def __len__(self):
+        return len(self.memory)

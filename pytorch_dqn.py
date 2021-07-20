@@ -50,22 +50,22 @@ class DQN(nn.Module):
 
     def __init__(self, h, w, outputs):
         super(DQN, self).__init__()
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=8, stride=4)
-        self.bn1 = nn.BatchNorm2d(32)
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)
-        self.bn2 = nn.BatchNorm2d(64)
-        self.conv3 = nn.Conv2d(64, 64, kernel_size=3, stride=1)
-        self.bn3 = nn.BatchNorm2d(64)
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=5, stride=2)
+        self.bn1 = nn.BatchNorm2d(16)
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=5, stride=2)
+        self.bn2 = nn.BatchNorm2d(32)
+        self.conv3 = nn.Conv2d(32, 32, kernel_size=5, stride=2)
+        self.bn3 = nn.BatchNorm2d(32)
 
         # Number of Linear input connections depends on output of conv2d layers
         # and therefore the input image size, so compute it.
         def conv2d_size_out(size, kernel_size = 5, stride = 2):
             return (size - (kernel_size - 1) - 1) // stride  + 1
-        convw = conv2d_size_out(conv2d_size_out(conv2d_size_out(w,8, 4),  4, 2), 3, 1)
-        convh = conv2d_size_out(conv2d_size_out(conv2d_size_out(h, 8, 4), 4, 2), 3, 1)
-        linear_input_size = convw * convh * 64
-        self.fc1 = nn.Linear(linear_input_size, 512)
-        self.head = nn.Linear(512, outputs)
+        convw = conv2d_size_out(conv2d_size_out(conv2d_size_out(w, 5, 2),  5, 2), 5, 2)
+        convh = conv2d_size_out(conv2d_size_out(conv2d_size_out(h, 5, 2), 5, 2), 5, 2)
+        linear_input_size = convw * convh * 32
+        # self.fc1 = nn.Linear(linear_input_size, 512)
+        self.head = nn.Linear(linear_input_size, outputs)
 
     # Called with either one element to determine next action, or a batch
     # during optimization. Returns tensor([[left0exp,right0exp]...]).
@@ -74,8 +74,8 @@ class DQN(nn.Module):
         x = F.relu(self.bn1(self.conv1(x)))
         x = F.relu(self.bn2(self.conv2(x)))
         x = F.relu(self.bn3(self.conv3(x)))
-        x = F.relu(self.fc1(x.view(x.size(0), -1)))
-        return self.head(x)
+        # x = F.relu(self.fc1(x.view(x.size(0), -1)))
+        return self.head(x.view(x.size(0), -1))
 
 resize = T.Compose([T.ToPILImage(),
                     T.Resize(40, interpolation=Image.CUBIC),
@@ -155,6 +155,7 @@ def select_action(state):
         math.exp(-1. * steps_done / EPS_DECAY)
     steps_done += 1
     if sample > eps_threshold:
+        # return torch.tensor([[random.randrange(n_actions)]], device=device, dtype=torch.long)
         with torch.no_grad():
             # t.max(1) will return largest column value of each row.
             # second column on max result is index of where max element was
@@ -246,7 +247,7 @@ def optimize_model():
     # Compute Huber loss
     criterion = nn.SmoothL1Loss()
     loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
-    print("loss", loss)
+    # print("loss", loss)
 
     # Optimize the model
     optimizer.zero_grad()
@@ -262,17 +263,20 @@ plt.ion()
 plt.figure(figsize=(15, 10))
 losses = []
 rewards = []
-num_episodes = 50
+num_episodes = 1000
 for i_episode in range(num_episodes):
     # Initialize the environment and state
     env.reset()
     last_screen = get_screen()
     current_screen = get_screen()
     state = current_screen - last_screen
+    total_reward = 0.0
     for t in count():
         # Select and perform an action
         action = select_action(state)
+        # action = env.sample()
         _, reward, done, _ = env.step(action.item())
+        total_reward += reward
         reward = torch.tensor([reward], device=device)
 
         # Observe new state
@@ -291,12 +295,12 @@ for i_episode in range(num_episodes):
 
         # Perform one step of the optimization (on the policy network)
         loss = optimize_model()
-        # Put reward and loss into separate list 
-        rewards.append(reward)
+        # Put loss into separate list 
         losses.append(loss)
 
         if done:
             episode_durations.append(t + 1)
+            rewards.append(total_reward)
             # plot_durations()
             plot(i_episode, rewards, losses, epsilons=None)
             break
@@ -305,6 +309,9 @@ for i_episode in range(num_episodes):
     # Update the target network, copying all weights and biases in DQN
     if i_episode % TARGET_UPDATE == 0:
         target_net.load_state_dict(policy_net.state_dict())
+
+    if i_episode % 20 == 0:
+        print('Total steps: {} \t Episode: {}/{} \t Total reward: {}'.format(steps_done, i_episode, t, total_reward))
 
 print('Complete')
 env.render()
