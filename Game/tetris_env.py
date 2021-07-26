@@ -13,11 +13,29 @@ logger = logging.getLogger(__name__)
 from random import randrange as rand
 import pygame, sys
 
+""" The board would look like this, and the last row is set as 1s.
+[[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+ [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+]
+"""
+
 # The configuration
 cell_size = 18
 cols =      10
 rows =      12  # standard game row is 22
 maxfps =    30
+
 
 colors = [
 (0,   0,   0  ),
@@ -122,7 +140,9 @@ class TetrisApp(object):
         if check_collision(self.board,
                            self.stone,
                            (self.stone_x, self.stone_y)):
-            self.gameover = True
+            self.gameover = True  # game terminates if the new stone collide with other piece from start
+            
+            
 
     def init_game(self):
         self.board = new_board()
@@ -185,9 +205,10 @@ class TetrisApp(object):
 
     def add_cl_lines(self, n):
         """ Compute cleared line, score and level, and adjust the dropping spped as level goes up. """
-        # linescores = [0, 40, 100, 300, 1200]
-        linescores = [0, 1, 4, 9, 16]
+        linescores = [0, 40, 100, 300, 1200]  # Nintendo scoring system
+        # linescores = [0, 10, 40, 90, 160]
         self.cl_lines = n
+        print("cleared line", self.cl_lines)
         self.lines += n
         self.score += linescores[n]
         self.score_lev += linescores[n] * self.level
@@ -238,6 +259,7 @@ class TetrisApp(object):
                             break
                     else:
                         break
+                print("cleared rows", cleared_rows)
                 self.add_cl_lines(cleared_rows)  # compute result
                 return True
         return False
@@ -254,6 +276,7 @@ class TetrisApp(object):
                                    new_stone,
                                    (self.stone_x, self.stone_y)):
                 self.stone = new_stone
+                
 
     def toggle_pause(self):
         self.paused = not self.paused
@@ -306,6 +329,8 @@ class TetrisApp(object):
         
 
     def clear_lines(self):
+        """ Return cleared lines in one step. """
+        print("call clear lines", self.cl_lines)
         return self.cl_lines
     
     def number_of_holes(self):
@@ -382,6 +407,7 @@ class TetrisApp(object):
     def fitness_reward(self, ver=None):
         a, b, c, d = -0.51, 0.76, -0.36, -0.18
         lines = self.clear_lines()
+        print("fit reward", lines)
         holes = self.number_of_holes()
         agg_height, max_h, min_h = self.total_height()
         bumpiness, max_bump = self.bumpiness()
@@ -389,37 +415,68 @@ class TetrisApp(object):
 
         if ver is None:
             new_fit = a * agg_height + b * lines + c * holes + d * bumpiness
+        elif ver == 0:
+            new_fit = 10 * lines
         elif ver == 1:
             new_fit = a * agg_height + b * lines + d * holes + c * bumpiness
         elif ver == 2:
-            d = -0.5
+            d = -1
             new_fit = d * bumpiness
         elif ver == 3:
             new_fit = 0.5 * space_filled + a * (max_h - min_h)
+        elif ver == 4:
+            new_fit = -1 * (max_h - min_h)
+        elif ver == 5:
+            new_fit = 0
+        elif ver == 6:
+            new_fit = -1 * holes
+        elif ver == 7:
+            new_fit = -1 * agg_height
+
 
         rew = new_fit - self.fitness_val
         self.fitness_val = new_fit
         return rew
 
+    def _combo_actions(self, move):
+        if move == 0:
+            self.rotate_stone()
+            self.move(-1)
+        elif move == 1:
+            self.rotate_stone()
+            self.move(1)
+        elif move == 2:
+            self.rotate_stone()
+            self.insta_drop()
+        elif move == 3:
+            self.rotate_stone()
+            self.drop(True)
 
 
     def _handle_actions(self, action):
         key_actions = {
-            'NONE':     self.drop(False),
-            'ESCAPE':   self.quit,  # not use
-            'LEFT':     lambda:self.move(-1),
-            'RIGHT':    lambda:self.move(+1),
-            'DOWN':     lambda:self.drop(True),
-            'ROTATE':   self.rotate_stone,
-            'p':        self.toggle_pause,  # not use 
-            'SPACE':    self.reset,  # not use
-            'INSDROP':  self.insta_drop
+            'NONE':         self.drop(False),
+            'ESCAPE':       self.quit,  # not use
+            'LEFT':         lambda:self.move(-1),
+            'RIGHT':        lambda:self.move(+1),
+            'DOWN':         lambda:self.drop(True),
+            'ROTATE':       self.rotate_stone,
+            'ROTATE+LEFT':  lambda:self._combo_actions(0),
+            'ROTATE+RIGHT': lambda:self._combo_actions(1),
+            'ROTATE+INSD':  lambda:self._combo_actions(2),
+            'ROTATE+DOWN':  lambda:self._combo_actions(3),
+            'p':            self.toggle_pause,  # not use 
+            'SPACE':        self.reset,  # not use
+            'INSDROP':      self.insta_drop
         }
 
         action_type = ACTION_LOOKUP[action]
         # If the action is not no operation, take the action
         if action > 0:
             key_actions[action_type]()
+
+        # if not self.stone_change:
+        #     self.drop(False)  # piece goes down one step whenever one action(including no operation) was taken
 
         self.stone_change = False
         for event in pygame.event.get():
@@ -428,12 +485,15 @@ class TetrisApp(object):
     
     def _draw_screen(self, train=True):
         self.screen.fill((0,0,0))
-        if not train and self.gameover:
+        if self.gameover and not train:  # if it's training, skip the game over page
             self.center_msg("""Game Over!\nYour score: %d
 Press space to continue""" % self.score)
         else:
             if self.paused:
                 self.center_msg("Paused")
+            if self.gameover:
+                self.center_msg("""Game Over!\nYour score: %d
+Press space to continue""" % self.score)
             else:
                 pygame.draw.line(self.screen,
                     (255,255,255),
@@ -482,13 +542,17 @@ Press space to continue""" % self.score)
 #                 if self.show_next_stone:
 #                     self.draw_matrix(self.next_stone,
 #                         (cols+1,2))
-        score_0 = self.score
+        # if not self.gameover:
         if action is None:
             self._draw_screen()
-        else:
-            self._handle_actions(action)
+        score_0 = self.score
         # print("score 0", score_0)
         # curr_line = self.lines
+        # self._draw_screen()
+        if self.cl_lines > 0:
+            self.cl_lines = 0
+        if action is not None:
+            self._handle_actions(action)
         
         self._draw_screen()
         pygame.display.update()
@@ -505,7 +569,8 @@ Press space to continue""" % self.score)
 
     def get_cl_lines(self):
         """ Return current total number of cleared lines. """
-        return self.line
+        print("total lines", self,lines)
+        return self.lines
 
     def get_screenRGB(self):
         """ Return current screen in RGB format. """
@@ -588,12 +653,15 @@ class TetrisEnv(gym.Env):
     3, # ROTATE
     4, # INSTANT DROP
     5, # DOWN
-    8  # QUIT
+    6, # ROTATE+LEFT
+    7, # ROTATE+RIGHT
+    8, # ROTATE+INSD
+    9  # ROTATE+DOWN
     }
 
     def __init__(self):
         self.game = TetrisApp()
-        self.action_space = spaces.Discrete(6)
+        self.action_space = spaces.Discrete(10)
         self.observation_space = spaces.Box(low=0, high=255,
         shape=(self.game.height, self.game.width, 3), dtype=np.uint8)
         self.shape = (self.game.height, self.game.width)
@@ -608,6 +676,7 @@ class TetrisEnv(gym.Env):
 
     def heuristic_state(self):
         cl_lines = self.game.clear_lines()
+        print("h state", cl_lines)
         holes = self.game.number_of_holes()
         height, _, _ = self.game.total_height()
         bumpiness, _ = self.game.bumpiness()
@@ -649,15 +718,14 @@ class TetrisEnv(gym.Env):
                 self.viewer = None
             return
         img = self._get_obs()
-        img_rotated = np.fliplr(np.rot90(np.rot90(np.rot90(img)))) 
 
         if mode == 'rgb_array':
-            return img_rotated
+            return img
         elif mode == 'human':
             from gym.envs.classic_control import rendering
             if self.viewer is None:
                 self.viewer = rendering.SimpleImageViewer()
-            self.viewer.imshow(img_rotated)
+            self.viewer.imshow(img)
 
     def close(self):
         self.game.quit()
@@ -673,7 +741,7 @@ class HeuristicReward(gym.RewardWrapper):
         return ob, self.reward(reward, fit_rew, done), done
     
     def reward(self, reward, fit_reward, done):
-        done_r = 0 if not done else -10
+        done_r = 0 if not done else 0
         rew = reward + fit_reward + done_r
         return rew
 
@@ -816,8 +884,8 @@ class TetrisPreprocessing(gym.Wrapper):
 
         for t in range(self.frame_skip if self.frame_skip > 0 else 1):
             self.curr_ob, reward, done = self.env.step(action)
-            # print("t reward", reward)
-            # print(self.env.heuristic_state())
+            print("t reward", reward)
+            print(self.env.heuristic_state())
             R += reward
             self.game_over = done
 
@@ -878,7 +946,11 @@ ACTION_LOOKUP = {
     2 : 'RIGHT',
     3 : 'ROTATE', # Used on defense to slide tackle the ball
     4 : 'INSDROP',  # Used only by goalie to catch the ball
-    5 : 'DOWN'
+    5 : 'DOWN',
+    6 : 'ROTATE+LEFT',
+    7 : 'ROTATE+RIGHT',
+    8 : 'ROTATE+INSD',
+    9 : 'ROTATE+DOWN'
 }
 
 # For testing
@@ -887,15 +959,23 @@ if __name__ == '__main__':
     os.environ["SDL_VIDEODRIVER"] = "dummy"
     FRAMESTACK = True
     PREPROCESS = True
+    from gym.wrappers.monitoring import video_recorder
+    # enable logging
+    gym.logger.set_level(gym.logger.DEBUG)
+    
+    
     if FRAMESTACK:
         game = TetrisEnv()
         game = CropObservation(game, (216, 200))
         game = HeuristicReward(game, ver=3)
         game = TetrisPreprocessing(game, frame_skip=3)
         game = FrameStack(game,4)
+        vid = video_recorder.VideoRecorder(game,path="./recording/vid_test.mp4")
+        game = gym.wrappers.Monitor(game, "./recording/vid_test.mp4", video_callable=lambda episode_id: True,force=True)
         
         print("Test begins")
         x_t1 = game.reset()
+        vid.capture_frame()
         print(game.observation_space.shape)
         print(x_t1.shape)
         # ob = np.concatenate(ob, axis=1)
@@ -908,9 +988,12 @@ if __name__ == '__main__':
         print(x_t1.shape)
         x_t1 = np.concatenate(x_t1, axis=1) 
         cv2.imwrite("framestack" + ".png", x_t1)
-        for i in range(10):
+        for i in range(20):
             action = game.action_space.sample()
             # action = 4
+            vid.capture_frame()
+            # game.render()
+            # action = int(input())
             print("%i action %i" % (i,action))
             x_t2, reward1, done1 = game.step(action)
             print("reward", reward1)
@@ -928,11 +1011,12 @@ if __name__ == '__main__':
             if done1:
                 x_t2 = game.reset()
             
+            
             # print(game.observation_space.shape)
             
     else:
         game = TetrisEnv()
-        game = CropObservation(game, (216, 216))
+        # game = CropObservation(game, (216, 216))
         print("Test begins")
         ob = game.reset()
         print(game.observation_space)
@@ -942,9 +1026,9 @@ if __name__ == '__main__':
         x_t1 = np.reshape(x_t1, (ob.shape[0], -1, 1))
         cv2.imwrite("frame" + ".png", x_t1)
 
-        for i in range(15):
+        for i in range(50):
             # action = game.action_space.sample()
-            action = 0
+            action = 8
             print("%i action %i" % (i,action))
             ob1, reward1, done1 = game.step(action)
             h_state = game.heuristic_state()
@@ -955,6 +1039,8 @@ if __name__ == '__main__':
             cv2.imwrite("frame" + str(i) + ".png", x_t2)
             print(ob1.shape)
             print(game.observation_space.shape)
+            if done1:
+                ob1 = game.reset()
             # game.render()
 
     

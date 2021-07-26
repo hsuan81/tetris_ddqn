@@ -29,7 +29,9 @@ RUN /opt/conda/bin/pip --disable-pip-version-check --no-cache-dir install -r /tm
    && rm -rf /tmp/pip-tmp
 
 
-
+# Let the gym rendering works on host system, but this is unsafe for host computer
+# Run --privileged=true --rm \
+    # -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix \
 
 
 

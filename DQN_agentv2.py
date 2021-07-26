@@ -42,30 +42,30 @@ def get_cart_location(screen_width):
     scale = screen_width / world_width
     return int(env.state[0] * scale + screen_width / 2.0)  # MIDDLE OF CART
 
-def get_screen():
-    # Returned screen requested by gym is 400x600x3, but is sometimes larger
-    # such as 800x1200x3. Transpose it into torch order (CHW).
-    screen = env.render(mode='rgb_array').transpose((2, 0, 1))
-    # Cart is in the lower half, so strip off the top and bottom of the screen
-    _, screen_height, screen_width = screen.shape
-    screen = screen[:, int(screen_height*0.4):int(screen_height * 0.8)]
-    view_width = int(screen_width * 0.6)
-    cart_location = get_cart_location(screen_width)
-    if cart_location < view_width // 2:
-        slice_range = slice(view_width)
-    elif cart_location > (screen_width - view_width // 2):
-        slice_range = slice(-view_width, None)
-    else:
-        slice_range = slice(cart_location - view_width // 2,
-                            cart_location + view_width // 2)
-    # Strip off the edges, so that we have a square image centered on a cart
-    screen = screen[:, :, slice_range]
-    # Convert to float, rescale, convert to torch tensor
-    # (this doesn't require a copy)
-    screen = np.ascontiguousarray(screen, dtype=np.float32) / 255
-    screen = torch.from_numpy(screen)
-    # Resize, and add a batch dimension (BCHW)
-    return resize(screen).unsqueeze(0)
+# def get_screen():
+#     # Returned screen requested by gym is 400x600x3, but is sometimes larger
+#     # such as 800x1200x3. Transpose it into torch order (CHW).
+#     screen = env.render(mode='rgb_array').transpose((2, 0, 1))
+#     # Cart is in the lower half, so strip off the top and bottom of the screen
+#     _, screen_height, screen_width = screen.shape
+#     screen = screen[:, int(screen_height*0.4):int(screen_height * 0.8)]
+#     view_width = int(screen_width * 0.6)
+#     cart_location = get_cart_location(screen_width)
+#     if cart_location < view_width // 2:
+#         slice_range = slice(view_width)
+#     elif cart_location > (screen_width - view_width // 2):
+#         slice_range = slice(-view_width, None)
+#     else:
+#         slice_range = slice(cart_location - view_width // 2,
+#                             cart_location + view_width // 2)
+#     # Strip off the edges, so that we have a square image centered on a cart
+#     screen = screen[:, :, slice_range]
+#     # Convert to float, rescale, convert to torch tensor
+#     # (this doesn't require a copy)
+#     screen = np.ascontiguousarray(screen, dtype=np.float32) / 255
+#     screen = torch.from_numpy(screen)
+#     # Resize, and add a batch dimension (BCHW)
+#     return resize(screen).unsqueeze(0)
 
 def select_action(state, n_actions):
     global steps_done
@@ -104,24 +104,38 @@ def select_action(state, n_actions):
 #         display.clear_output(wait=True)
 #         display.display(plt.gcf())
 
-def plot(episode, total_rewards, losses, epsilons=None):
+def plot(episode, total_rewards, rewards, losses, cleared_lines, epsilons=None):
     # plt.figure(figsize=(10, 10))
     plt.clf()
     
     
-    plt.subplot(121)
+    plt.subplot(221)
     plt.title("episode: %s ,total_reward: %s" % (episode, total_rewards[episode - 1]))
+    plt.xlabel("episode")
     plt.plot(total_rewards)
+
+    plt.subplot(222)
+    plt.title("cleared lines")
+    plt.xlabel("episode")
+    plt.plot(cleared_lines)
     
-    plt.subplot(122)
-    plt.title("loss in each step")
-    plt.plot(losses)
-    
-    # plt.subplot(133)
-    # plt.title("epsilons in each step")
-    # plt.plot(epsilons)
+    plt.subplot(223)
+    plt.title("reward: %s" % rewards[-1])
+    plt.xlabel("step")
+    plt.plot(rewards)
+
+    plt.subplot(224)
+    plt.title("loss")
+    plt.xlabel("step")
+    plt.ylim(0, 20)
+    plt.plot(losses)    
     
     plt.pause(0.01)
+
+def get_torch_screen(np_screen):
+    screen = torch.from_numpy(np_screen).float().to(device)
+    return screen.unsqueeze(0)
+
 
 def optimize_model():
     if len(memory) < BATCH_SIZE:
@@ -174,35 +188,43 @@ def optimize_model():
     optimizer.step()
     return loss
 
-def train(env, num_episodes, check_point):
+def train(env, num_episodes, check_point, render=False, train_ver=0):
     saving_path = './model_saving'
     losses = []
     rewards = []
+    each_reward = []
+    cleared_lines = []
     episode_durations = []
     for i_episode in range(num_episodes):
         # Initialize the environment and state
-        env.reset()
-        last_screen = get_screen()
-        current_screen = get_screen()
-        state = current_screen - last_screen
+        state = get_torch_screen(env.reset())
+        # print("state shape", state.shape)
         total_reward = 0.0
+        cl_lines = 0
         for t in count():
             # Select and perform an action
             action = select_action(state, n_actions)
             # action = env.sample()
-            _, reward, done, _ = env.step(action.item())
+            if render:
+                env.render()
+                time.sleep(0.02)
+
+            next_state, reward, done = env.step(action.item())
+            next_state = get_torch_screen(next_state)
+            # Obtain the heuristic state for this step
+            h_state = env.heuristic_state()
+            cl_lines += h_state[0]
+
             total_reward += reward
-            
+            each_reward.append(reward)
 
             # turn reward to tensor form
             reward = torch.tensor([reward], device=device)
 
             # Observe new state
-            last_screen = current_screen
-            current_screen = get_screen()
-            if not done:
-                next_state = current_screen - last_screen
-            else:
+            # last_screen = current_screen
+            # current_screen = get_screen()
+            if done:
                 next_state = None
 
             # Store the transition in memory
@@ -219,61 +241,71 @@ def train(env, num_episodes, check_point):
             if done:
                 episode_durations.append(t + 1)
                 rewards.append(total_reward)
+                cleared_lines.append(cl_lines)
+                print("train total", cl_lines)
                 # plot_durations()
-                plot(i_episode, rewards, losses, epsilons=None)
+                plot(i_episode, rewards, each_reward, losses, cleared_lines, epsilons=None)
                 break
             
+            
+
             
         # Update the target network, copying all weights and biases in DQN
         if i_episode % TARGET_UPDATE == 0:
             target_net.load_state_dict(policy_net.state_dict())
 
         if i_episode % 20 == 0:
-            print('Total steps: {} \t Episode: {}/{} \t Total reward: {}'.format(steps_done, i_episode, t, total_reward))
+            print('Total steps: {} \t Episode: {}/{} \t Total reward: {} \t lines: {}'.format(steps_done, i_episode, t, total_reward, cl_lines))
 
         if i_episode in check_point:
-                torch.save(policy_net, "%s/%s_%s.pth" % (saving_path, "DQN", i_episode))
+                torch.save(policy_net, "%s/%s_%s_v%s.pth" % (saving_path, "DQN", i_episode, train_ver))
                 torch.save({
                             'episode': i_episode,
                             'model_state_dict': policy_net.state_dict(),
                             'target_state_dict': target_net.state_dict(),
                             'optimizer_state_dict': optimizer.state_dict(),
                             'loss': loss,
-                            'learning rate': lr,   # if it is Adam
-                            }, "%s/%s_%s_train.pth" % (saving_path, "DQN", i_episode))   # save for later training
+                            # 'learning rate': lr,   # if it is Adam
+                            }, "%s/%s_%s_train_v%s.pth" % (saving_path, "DQN", i_episode, train_ver))   # save for later training
 
     print('Complete')
-    # Average cleared lines over some benchmark, save the model for testing
-    # env.render()
+    # Average cleared lines of last 100 games, if over some benchmark, save the model for testing
+    last_100 = cleared_lines[-100:]
+    avg_100 = sum(last_100) // len(last_100)
+    if avg_100 > 0:
+        torch.save(policy_net, "%s/%s_%s.pth" % (saving_path, "DQN_avg100", avg_100))
+    # 
+    plt.savefig('%s/DQN_ep%s_v%s.png' % ('results', num_episodes, train_ver), bbox_inches='tight') 
     env.close()
     plt.ioff()
-    plt.show()
+    # plt.show(block=True)
 
 def test(env, n_episodes, policy_net, render=False):
     for episode in range(n_episodes):
-        env.reset()
-        state = get_screen()
+        state = get_torch_screen(env.reset())
+        cl_lines = 0
         total_reward = 0.0
         for t in count():
-            action = policy_net(state.to(device)).max(1)[1].view(1,1)
+            action = policy_net(state).max(1)[1].view(1,1)
 
             if render:
                 env.render()
                 time.sleep(0.02)
 
-            obs, reward, done, _ = env.step(action.item())
+            next_state, reward, done = env.step(action.item())
+            next_state = get_torch_screen(next_state)
+            h_state = env.heuristic_state()
+            cl_lines += h_state[0]
 
             total_reward += reward
 
-            if not done:
-                next_state = get_screen()
-            else:
+            if done:
                 next_state = None
 
             state = next_state
 
             if done:
-                print("Finished Episode {} with reward {}".format(episode, total_reward))
+                print("Finished Episode {}/{} with reward {} and cleared lines {}".format(episode, t, total_reward, cl_lines))
                 break
 
     print("Complete")
@@ -285,9 +317,10 @@ if __name__ == '__main__':
     # env = gym.make('CartPole-v0').unwrapped
 
     # Train for Tetris
+    reward_ver = 7
     env = TetrisEnv()
     env = CropObservation(env, (216, 200))
-    env = HeuristicReward(env, ver=3)
+    env = HeuristicReward(env, ver=reward_ver)
     env = TetrisPreprocessing(env, screen_size=84, frame_skip=2)
     env = FrameStack(env,4)
 
@@ -297,12 +330,15 @@ if __name__ == '__main__':
     GAMMA = 0.999
     EPS_START = 0.9
     EPS_END = 0.05
-    EPS_DECAY = 1000000
+    EPS_DECAY = 200  # 1000000 originally
     TARGET_UPDATE = 200
+    in_channels = 4  # due to frame stack
+    lr = 0.0001
     check_point = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 
             3000, 5000, 10000, 50000, 100000, 300000, 500000]
 
-    screen_shape = env.observation_space.shape
+
+    screen_shape = env.observation_space.shape[1:]
     print("screen shape", screen_shape)
 
     # if gpu is to be used
@@ -330,8 +366,8 @@ if __name__ == '__main__':
     print("num action", n_actions)
 
 
-    policy_net = DQN(n_actions, in_channels=1, screen_shape=screen_shape).to(device)
-    target_net = DQN(n_actions, in_channels=1, screen_shape=screen_shape).to(device)
+    policy_net = DQN(n_actions, in_channels=in_channels, screen_shape=screen_shape).to(device)
+    target_net = DQN(n_actions, in_channels=in_channels, screen_shape=screen_shape).to(device)
     target_net.load_state_dict(policy_net.state_dict())
     target_net.eval()
 
@@ -340,11 +376,12 @@ if __name__ == '__main__':
 
     steps_done = 0
 
-    # Training
+    # Training and testing
     plt.ion()
     plt.figure(figsize=(15, 10))
-    num_episodes = 1000
-    train(env, num_episodes, check_point)
-    torch.save(policy_net, "dqn_tetris_model")
-    policy_net = torch.load("dqn_cart_model")
-    test(env, 20, policy_net, render=True)
+    num_episodes = 700
+    train(env, num_episodes, check_point, render=True, train_ver=reward_ver)
+    # torch.save(policy_net, "dqn_tetris_model")
+    # policy_net = torch.load("model_saving/DQN_600.pth")
+
+    # test(env, 20, policy_net, render=True)

@@ -263,7 +263,12 @@ plt.ion()
 plt.figure(figsize=(15, 10))
 losses = []
 rewards = []
-num_episodes = 1000
+num_episodes = 10
+record = True
+
+
+from gym.wrappers.monitoring import video_recorder
+vid = video_recorder.VideoRecorder(env,path="./recording/vid.mp4")
 for i_episode in range(num_episodes):
     # Initialize the environment and state
     env.reset()
@@ -271,7 +276,12 @@ for i_episode in range(num_episodes):
     current_screen = get_screen()
     state = current_screen - last_screen
     total_reward = 0.0
+    
     for t in count():
+        if record:
+            # env.render()
+            print("record")
+            vid.capture_frame()
         # Select and perform an action
         action = select_action(state)
         # action = env.sample()
@@ -313,8 +323,9 @@ for i_episode in range(num_episodes):
     if i_episode % 20 == 0:
         print('Total steps: {} \t Episode: {}/{} \t Total reward: {}'.format(steps_done, i_episode, t, total_reward))
 
+
 print('Complete')
-env.render()
+# env.render()
 env.close()
 plt.ioff()
 plt.show()
