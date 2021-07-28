@@ -188,7 +188,7 @@ def optimize_model():
     optimizer.step()
     return loss
 
-def train(env, num_episodes, check_point, render=False, train_ver=0):
+def train(env, num_episodes, check_point, render=False, train_ver=0, record_point=None):
     saving_path = './model_saving'
     losses = []
     rewards = []
@@ -201,6 +201,18 @@ def train(env, num_episodes, check_point, render=False, train_ver=0):
         # print("state shape", state.shape)
         total_reward = 0.0
         cl_lines = 0
+        
+        record = False
+        if record_point is not None:
+            from gym.wrappers.monitoring import video_recorder
+            if i_episode in record_point:
+                vid = video_recorder.VideoRecorder(env, path="./recording/vid_v%s_%s.mp4" %(train_ver, i_episode))
+                record = True
+            elif i_episode in [x+50 for x in record_point]:
+                vid.enabled = False
+                vid.close()
+                record = False
+
         for t in count():
             # Select and perform an action
             action = select_action(state, n_actions)
@@ -208,6 +220,8 @@ def train(env, num_episodes, check_point, render=False, train_ver=0):
             if render:
                 env.render()
                 time.sleep(0.02)
+            if record:
+                vid.capture_frame()
 
             next_state, reward, done = env.step(action.item())
             next_state = get_torch_screen(next_state)
@@ -242,7 +256,7 @@ def train(env, num_episodes, check_point, render=False, train_ver=0):
                 episode_durations.append(t + 1)
                 rewards.append(total_reward)
                 cleared_lines.append(cl_lines)
-                print("train total", cl_lines)
+                # print("train total", cl_lines)
                 # plot_durations()
                 plot(i_episode, rewards, each_reward, losses, cleared_lines, epsilons=None)
                 break
@@ -257,6 +271,9 @@ def train(env, num_episodes, check_point, render=False, train_ver=0):
         if i_episode % 20 == 0:
             print('Total steps: {} \t Episode: {}/{} \t Total reward: {} \t lines: {}'.format(steps_done, i_episode, t, total_reward, cl_lines))
 
+        
+
+                
         if i_episode in check_point:
                 torch.save(policy_net, "%s/%s_%s_v%s.pth" % (saving_path, "DQN", i_episode, train_ver))
                 torch.save({
@@ -339,7 +356,7 @@ if __name__ == '__main__':
 
 
     screen_shape = env.observation_space.shape[1:]
-    print("screen shape", screen_shape)
+    # print("screen shape", screen_shape)
 
     # if gpu is to be used
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -380,6 +397,7 @@ if __name__ == '__main__':
     plt.ion()
     plt.figure(figsize=(15, 10))
     num_episodes = 700
+    record_point = [300, 500, num_episodes-50]
     train(env, num_episodes, check_point, render=True, train_ver=reward_ver)
     # torch.save(policy_net, "dqn_tetris_model")
     # policy_net = torch.load("model_saving/DQN_600.pth")

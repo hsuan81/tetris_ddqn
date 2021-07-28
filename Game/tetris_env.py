@@ -208,7 +208,7 @@ class TetrisApp(object):
         linescores = [0, 40, 100, 300, 1200]  # Nintendo scoring system
         # linescores = [0, 10, 40, 90, 160]
         self.cl_lines = n
-        print("cleared line", self.cl_lines)
+        # print("cleared line", self.cl_lines)
         self.lines += n
         self.score += linescores[n]
         self.score_lev += linescores[n] * self.level
@@ -259,7 +259,7 @@ class TetrisApp(object):
                             break
                     else:
                         break
-                print("cleared rows", cleared_rows)
+                # print("cleared rows", cleared_rows)
                 self.add_cl_lines(cleared_rows)  # compute result
                 return True
         return False
@@ -330,7 +330,7 @@ class TetrisApp(object):
 
     def clear_lines(self):
         """ Return cleared lines in one step. """
-        print("call clear lines", self.cl_lines)
+        # print("call clear lines", self.cl_lines)
         return self.cl_lines
     
     def number_of_holes(self):
@@ -407,7 +407,7 @@ class TetrisApp(object):
     def fitness_reward(self, ver=None):
         a, b, c, d = -0.51, 0.76, -0.36, -0.18
         lines = self.clear_lines()
-        print("fit reward", lines)
+        # print("fit reward", lines)
         holes = self.number_of_holes()
         agg_height, max_h, min_h = self.total_height()
         bumpiness, max_bump = self.bumpiness()
@@ -569,7 +569,7 @@ Press space to continue""" % self.score)
 
     def get_cl_lines(self):
         """ Return current total number of cleared lines. """
-        print("total lines", self,lines)
+        # print("total lines", self,lines)
         return self.lines
 
     def get_screenRGB(self):
@@ -676,7 +676,7 @@ class TetrisEnv(gym.Env):
 
     def heuristic_state(self):
         cl_lines = self.game.clear_lines()
-        print("h state", cl_lines)
+        # print("h state", cl_lines)
         holes = self.game.number_of_holes()
         height, _, _ = self.game.total_height()
         bumpiness, _ = self.game.bumpiness()
@@ -884,8 +884,8 @@ class TetrisPreprocessing(gym.Wrapper):
 
         for t in range(self.frame_skip if self.frame_skip > 0 else 1):
             self.curr_ob, reward, done = self.env.step(action)
-            print("t reward", reward)
-            print(self.env.heuristic_state())
+            # print("t reward", reward)
+            # print(self.env.heuristic_state())
             R += reward
             self.game_over = done
 

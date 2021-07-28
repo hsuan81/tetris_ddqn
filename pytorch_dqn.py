@@ -268,7 +268,7 @@ record = True
 
 
 from gym.wrappers.monitoring import video_recorder
-vid = video_recorder.VideoRecorder(env,path="./recording/vid.mp4")
+vid = video_recorder.VideoRecorder(env,path="./recording/vidtt.mp4")
 for i_episode in range(num_episodes):
     # Initialize the environment and state
     env.reset()
@@ -276,18 +276,26 @@ for i_episode in range(num_episodes):
     current_screen = get_screen()
     state = current_screen - last_screen
     total_reward = 0.0
+    # if record and i_episode == 0:
+        
+    # if i_episode == 8:
+    #     print(i_episode)
+    #     vid.enabled = False
+        # vid.close()
     
     for t in count():
-        if record:
-            # env.render()
-            print("record")
-            vid.capture_frame()
+        # if record: 
+        env.render()
+        # print("record")
+        vid.capture_frame()
         # Select and perform an action
         action = select_action(state)
         # action = env.sample()
         _, reward, done, _ = env.step(action.item())
         total_reward += reward
         reward = torch.tensor([reward], device=device)
+
+        
 
         # Observe new state
         last_screen = current_screen
