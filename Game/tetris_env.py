@@ -147,7 +147,7 @@ class TetrisApp(object):
     def init_game(self):
         self.board = new_board()
         self.board_width = len(self.board[0])
-        self.board_height = len(self.board)
+        self.board_height = len(self.board)-1
         self.new_stone()
         self.level = 1
         self.score = 0
@@ -286,28 +286,29 @@ class TetrisApp(object):
         self.init_game()
 
     def _check_height(self):
-        row = self.stone_y + 1
+        row = self.stone_y + len(self.stone) - 1   # get the bottom row position of the stone
         col = self.stone_x
         col_len = len(self.stone[0])
         cols = []
 
         # Current stone was placed at the bottom
-        if row + 1 == len(self.board):
-            return row, cols 
+        if row + 1 == len(self.board) - 1:
+            return row, cols
 
         for i in range(col_len):
             c = col + i
-            if self.board[row][c] != 0:
+            if row < self.board_height and self.board[row][c] != 0:
                 if self.board[row + 1][c] == 0:
                     cols.append(c)
                 else:
                     cols = []
                     break
         next_row = row + 1
+        # print("check height", (next_row, cols))
         return next_row, cols
         
     def row_window(self, min_h):
-        bottom_r = self.board_height - min_h - 1
+        bottom_r = self.board_height - min_h
         return self.board[bottom_r - 2 : bottom_r]
 
     def win_filled(self):
@@ -326,10 +327,99 @@ class TetrisApp(object):
         self.filled = filled
         return filled
 
+    def landing_height(self):
+        pass
+
+    def depth_wells(self):
+        # sum of depth of wells
+        wells = 0
+        c = 0
+        min_ys = []
+        real_r, real_cs = self._check_height()
+
+        for col in zip(*self.board):
+            if c in real_cs:
+                i = real_r
+            else:
+                i = 0
+            while i < self.board_height and col[i] == 0:
+                i += 1
+            # print("pos", (c, i))
+            min_ys.append(i)
+            # wells covered (holes with consecutive empty cells cumulated vertically)
+            if col[i:].count(0) > 1:
+                head = None
+                w = 0
+                for x in range(i, self.board_height):
+                    if col[x] == 0 and col[x-1] != 0:
+                        head = x
+                    if head is not None:
+                        if col[x] != 0 and col[x-1] == 0: 
+                            w = x - head
+                        elif x == self.board_height-1 and col[x] == 0:
+                            w = self.board_height - head
+                        if w > 1:
+                            wells += w 
+                            w = 0
+                            head = None
+
+            c += 1
+        
+        # wells not covered
+        ys = [x for x in enumerate(min_ys)]
+        left = None
+        for c, row in ys:
+            if c == 0:
+                if ys[c+1][1] <= row:
+                    left = (c, 0)
+                    # left = (c, self.board_height)
+            elif ys[c-1][1] < row:
+                left = (c, abs(ys[c-1][1] - row))
+            if left is not None:
+                if c == len(ys)-1:
+                    if ys[c-1][1] <= row:
+                        # right = (c, self.board_height)
+                        right = (c, 0)
+                        width = abs(left[0]-right[0]) + 1
+                        # d = min(left[1], right[1]) * width
+                        d = max(left[1], right[1]) * width
+                        wells += d
+                        left = None
+                elif ys[c+1][1] < row:
+                    right = (c, abs(ys[c+1][1] - row))
+                    width = abs(left[0]-right[0]) + 1
+                    # d = min(left[1], right[1]) * width
+                    d = max(left[1], right[1]) * width
+                    wells += d
+                    left = None
+        
+        return wells
+
+
+
+    def number_row_with_holes(self):
+        row_with_holes = set()
+        real_r, real_cs = self._check_height()
+        r = real_r
+        c = 0
+        for col in zip(*self.board):
+            if c in real_cs:
+                r = real_r
+            else:
+                r = 0
+            while r < self.board_height and col[r] == 0:
+                r += 1
+            for i in range(r, self.board_height):
+                if col[i] == 0:
+                    row_with_holes.add(i)
+            c += 1
+
+        return len(row_with_holes)
+
         
 
     def clear_lines(self):
-        """ Return cleared lines in one step. """
+        """ Return cleared lines in this step. """
         # print("call clear lines", self.cl_lines)
         return self.cl_lines
     
@@ -367,7 +457,7 @@ class TetrisApp(object):
                 i = 0
             while i < self.board_height and col[i] == 0:
                 i += 1
-            height = self.board_height - i - 1
+            height = self.board_height - i
             sum_height += height
             if height > max_height:
                 max_height = height
@@ -412,26 +502,44 @@ class TetrisApp(object):
         agg_height, max_h, min_h = self.total_height()
         bumpiness, max_bump = self.bumpiness()
         space_filled = self.win_filled()
+        num_row_holes = self.number_row_with_holes()
+        wells = self.depth_wells()
 
         if ver is None:
+            # genetic algorithm in Stevens' paper
             new_fit = a * agg_height + b * lines + c * holes + d * bumpiness
         elif ver == 0:
+            # cleared lines
             new_fit = 10 * lines
         elif ver == 1:
+            # different coefficient for genetic algorithm
             new_fit = a * agg_height + b * lines + d * holes + c * bumpiness
         elif ver == 2:
+            # Sum of height differences between adjacent columns
             d = -1
             new_fit = d * bumpiness
         elif ver == 3:
+            # difference of space filled at the two rows above the lowest height and difference of max and min height
             new_fit = 0.5 * space_filled + a * (max_h - min_h)
         elif ver == 4:
+            # difference of max and min height
             new_fit = -1 * (max_h - min_h)
         elif ver == 5:
+            # punishment from termination
             new_fit = 0
         elif ver == 6:
+            # number of holes
             new_fit = -1 * holes
         elif ver == 7:
+            # aggregation of columns height
             new_fit = -1 * agg_height
+        elif ver == 8:
+            # rows with holes
+            new_fit = -1 * num_row_holes
+        elif ver == 9:
+            new_fit = -1 * wells
+        elif ver == 10:
+            new_fit = -1 * max_h
 
 
         rew = new_fit - self.fitness_val
@@ -671,6 +779,12 @@ class TetrisEnv(gym.Env):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
+    def total_lines(self):
+        return self.game.get_cl_lines()
+
+    def cleared_lines(self):
+        return self.game.clear_lines()
+
     def fitness_reward(self, ver=None):
         return self.game.fitness_reward(ver)
 
@@ -681,7 +795,9 @@ class TetrisEnv(gym.Env):
         height, _, _ = self.game.total_height()
         bumpiness, _ = self.game.bumpiness()
         window_filled = self.game.win_filled()
-        return (cl_lines, holes, height, bumpiness, window_filled)
+        num_row_hole = self.game.number_row_with_holes()
+        wells = self.game.depth_wells()
+        return (cl_lines, holes, height, bumpiness, window_filled, num_row_hole, wells)
 
     def step(self, action):
         """ 
@@ -862,6 +978,7 @@ class TetrisPreprocessing(gym.Wrapper):
         self.scale_obs = scale_obs
         self.crop_obs = crop_obs
         self.curr_ob = None
+        self.cleared_lines_buffer = 0
 
         # buffer of most recent two observations for max pooling (not using in Tetris case)
         if grayscale_obs:
@@ -881,6 +998,7 @@ class TetrisPreprocessing(gym.Wrapper):
 
     def step(self, action):
         R = 0.0
+        self.cleared_lines_buffer = 0
 
         for t in range(self.frame_skip if self.frame_skip > 0 else 1):
             self.curr_ob, reward, done = self.env.step(action)
@@ -888,6 +1006,7 @@ class TetrisPreprocessing(gym.Wrapper):
             # print(self.env.heuristic_state())
             R += reward
             self.game_over = done
+            self.cleared_lines_buffer += self.env.cleared_lines()
 
             if done:
                 break
@@ -904,6 +1023,17 @@ class TetrisPreprocessing(gym.Wrapper):
                     # # self.ale.getScreenRGB2(self.obs_buffer[0])
                     pass
         return self._get_obs(), R, done
+
+    def heuristic_state(self):
+        cl_lines = self.cleared_lines_buffer
+        # print("h state", cl_lines)
+        holes = self.game.number_of_holes()
+        height, _, _ = self.game.total_height()
+        bumpiness, _ = self.game.bumpiness()
+        window_filled = self.game.win_filled()
+        num_row_hole = self.game.number_row_with_holes()
+        wells = self.game.depth_wells()
+        return (cl_lines, holes, height, bumpiness, window_filled, num_row_hole, wells)
 
     def reset(self, **kwargs):
         # NoopReset
@@ -957,7 +1087,7 @@ ACTION_LOOKUP = {
 if __name__ == '__main__':
     import os
     os.environ["SDL_VIDEODRIVER"] = "dummy"
-    FRAMESTACK = True
+    FRAMESTACK = False
     PREPROCESS = True
     from gym.wrappers.monitoring import video_recorder
     # enable logging
@@ -971,7 +1101,7 @@ if __name__ == '__main__':
         game = TetrisPreprocessing(game, frame_skip=3)
         game = FrameStack(game,4)
         vid = video_recorder.VideoRecorder(game,path="./recording/vid_test.mp4")
-        game = gym.wrappers.Monitor(game, "./recording/vid_test.mp4", video_callable=lambda episode_id: True,force=True)
+        # game = gym.wrappers.Monitor(game, "./recording/vid_test.mp4", video_callable=lambda episode_id: True,force=True)
         
         print("Test begins")
         x_t1 = game.reset()
@@ -989,11 +1119,11 @@ if __name__ == '__main__':
         x_t1 = np.concatenate(x_t1, axis=1) 
         cv2.imwrite("framestack" + ".png", x_t1)
         for i in range(20):
-            action = game.action_space.sample()
+            # action = game.action_space.sample()
             # action = 4
-            vid.capture_frame()
-            # game.render()
-            # action = int(input())
+            # vid.capture_frame()
+            game.render()
+            action = int(input())
             print("%i action %i" % (i,action))
             x_t2, reward1, done1 = game.step(action)
             print("reward", reward1)
@@ -1026,13 +1156,15 @@ if __name__ == '__main__':
         x_t1 = np.reshape(x_t1, (ob.shape[0], -1, 1))
         cv2.imwrite("frame" + ".png", x_t1)
 
-        for i in range(50):
+        for i in range(40):
+            game.render()
             # action = game.action_space.sample()
-            action = 8
+            # action = 4
+            action = int(input())
             print("%i action %i" % (i,action))
             ob1, reward1, done1 = game.step(action)
             h_state = game.heuristic_state()
-            print(i, h_state)
+            print(i, h_state, game.total_lines())
             x_t2 = cv2.cvtColor(ob1, cv2.COLOR_BGR2GRAY)
             # ret, x_t2 = cv2.threshold(x_t2,1,255,cv2.THRESH_BINARY)
             # x_t2 = np.reshape(x_t2, (288, -1, 1))
@@ -1041,7 +1173,7 @@ if __name__ == '__main__':
             print(game.observation_space.shape)
             if done1:
                 ob1 = game.reset()
-            # game.render()
+            
 
     
 

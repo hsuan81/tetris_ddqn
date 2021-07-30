@@ -263,12 +263,12 @@ plt.ion()
 plt.figure(figsize=(15, 10))
 losses = []
 rewards = []
-num_episodes = 10
+num_episodes = 30
 record = True
 
 
 from gym.wrappers.monitoring import video_recorder
-vid = video_recorder.VideoRecorder(env,path="./recording/vidtt.mp4")
+
 for i_episode in range(num_episodes):
     # Initialize the environment and state
     env.reset()
@@ -277,11 +277,15 @@ for i_episode in range(num_episodes):
     state = current_screen - last_screen
     total_reward = 0.0
     # if record and i_episode == 0:
+    if i_episode == 0:
+        vid = video_recorder.VideoRecorder(env,path="./recording/vidkk10.mp4")
+    if i_episode == 15:
+        vid = video_recorder.VideoRecorder(env,path="./recording/vidk15.mp4")
         
-    # if i_episode == 8:
-    #     print(i_episode)
-    #     vid.enabled = False
-        # vid.close()
+    if i_episode in [10, 25]:
+        print(i_episode)
+        vid.enabled = False
+        vid.close()
     
     for t in count():
         # if record: 

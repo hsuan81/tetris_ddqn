@@ -195,12 +195,14 @@ def train(env, num_episodes, check_point, render=False, train_ver=0, record_poin
     each_reward = []
     cleared_lines = []
     episode_durations = []
+    if record_point is not None:
+        from gym.wrappers.monitoring import video_recorder
     for i_episode in range(num_episodes):
         # Initialize the environment and state
         state = get_torch_screen(env.reset())
         # print("state shape", state.shape)
         total_reward = 0.0
-        cl_lines = 0
+        total_lines = 0
         
         record = False
         if record_point is not None:
@@ -208,10 +210,12 @@ def train(env, num_episodes, check_point, render=False, train_ver=0, record_poin
             if i_episode in record_point:
                 vid = video_recorder.VideoRecorder(env, path="./recording/vid_v%s_%s.mp4" %(train_ver, i_episode))
                 record = True
-            elif i_episode in [x+50 for x in record_point]:
+                print("record start:", i_episode)
+            elif i_episode in [x+40 for x in record_point]:
                 vid.enabled = False
                 vid.close()
                 record = False
+                print("record ends:", i_episode)
 
         for t in count():
             # Select and perform an action
@@ -227,7 +231,7 @@ def train(env, num_episodes, check_point, render=False, train_ver=0, record_poin
             next_state = get_torch_screen(next_state)
             # Obtain the heuristic state for this step
             h_state = env.heuristic_state()
-            cl_lines += h_state[0]
+            total_lines = env.total_lines()
 
             total_reward += reward
             each_reward.append(reward)
@@ -255,7 +259,7 @@ def train(env, num_episodes, check_point, render=False, train_ver=0, record_poin
             if done:
                 episode_durations.append(t + 1)
                 rewards.append(total_reward)
-                cleared_lines.append(cl_lines)
+                cleared_lines.append(total_lines)
                 # print("train total", cl_lines)
                 # plot_durations()
                 plot(i_episode, rewards, each_reward, losses, cleared_lines, epsilons=None)
@@ -269,7 +273,7 @@ def train(env, num_episodes, check_point, render=False, train_ver=0, record_poin
             target_net.load_state_dict(policy_net.state_dict())
 
         if i_episode % 20 == 0:
-            print('Total steps: {} \t Episode: {}/{} \t Total reward: {} \t lines: {}'.format(steps_done, i_episode, t, total_reward, cl_lines))
+            print('Total steps: {} \t Episode: {}/{} \t Total reward: {} \t lines: {}'.format(steps_done, i_episode, t, total_reward, total_lines))
 
         
 
@@ -334,7 +338,7 @@ if __name__ == '__main__':
     # env = gym.make('CartPole-v0').unwrapped
 
     # Train for Tetris
-    reward_ver = 7
+    reward_ver = 10
     env = TetrisEnv()
     env = CropObservation(env, (216, 200))
     env = HeuristicReward(env, ver=reward_ver)
@@ -396,9 +400,13 @@ if __name__ == '__main__':
     # Training and testing
     plt.ion()
     plt.figure(figsize=(15, 10))
-    num_episodes = 700
-    record_point = [300, 500, num_episodes-50]
-    train(env, num_episodes, check_point, render=True, train_ver=reward_ver)
+    num_episodes = 3000
+    record_point = [300, 500, 1000, 2000, num_episodes-50]
+    # record_point = [10, 20, 40]
+    train(env, num_episodes, check_point, render=True, train_ver=reward_ver, record_point=record_point)
+    reward_ver = 10
+    # restart env
+    train(env, num_episodes, check_point, render=True, train_ver=reward_ver,record_point=record_point)
     # torch.save(policy_net, "dqn_tetris_model")
     # policy_net = torch.load("model_saving/DQN_600.pth")
 
