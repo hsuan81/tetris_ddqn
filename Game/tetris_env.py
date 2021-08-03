@@ -32,9 +32,9 @@ import pygame, sys
 
 # The configuration
 cell_size = 18
-cols =      10
-rows =      12  # standard game row is 22
-maxfps =    30
+cols =      8  # standard game col is 10
+rows =      10  # standard game row is 22
+maxfps =    300
 
 
 colors = [
@@ -51,22 +51,22 @@ colors = [
 
 # Define the shapes of the single parts
 tetris_shapes = [
-    [[1, 1, 1],
-     [0, 1, 0]],
+    # [[1, 1, 1],
+    #  [0, 1, 0]],
 
-    [[0, 2, 2],
-     [2, 2, 0]],
+    # [[0, 2, 2],
+    #  [2, 2, 0]],
 
-    [[3, 3, 0],
-     [0, 3, 3]],
+    # [[3, 3, 0],
+    #  [0, 3, 3]],
 
-    [[4, 0, 0],
-     [4, 4, 4]],
+    # [[4, 0, 0],
+    #  [4, 4, 4]],
 
-    [[0, 0, 5],
-     [5, 5, 5]],
+    # [[0, 0, 5],
+    #  [5, 5, 5]],
 
-    [[6, 6, 6, 6]],
+    # [[6, 6, 6, 6]],
 
     [[7, 7],
      [7, 7]]
@@ -205,8 +205,9 @@ class TetrisApp(object):
 
     def add_cl_lines(self, n):
         """ Compute cleared line, score and level, and adjust the dropping spped as level goes up. """
-        linescores = [0, 40, 100, 300, 1200]  # Nintendo scoring system
+        # linescores = [0, 40, 100, 300, 1200]  # Nintendo scoring system
         # linescores = [0, 10, 40, 90, 160]
+        linescores = [0, 0, 0, 0, 0]
         self.cl_lines = n
         # print("cleared line", self.cl_lines)
         self.lines += n
@@ -329,6 +330,21 @@ class TetrisApp(object):
 
     def landing_height(self):
         pass
+
+    def empty_cell(self):
+        _, max_h, _ = self.total_height()
+        # print("max h", max_h)
+        # to_fill = max_h * self.board_width
+        empty = 0
+        top_row = self.board_height - max_h
+        w = max_h
+        # print("top row", top_row)
+        for row in self.board[top_row:-1]:
+            # empty += row.count(0)
+            e = w * row.count(0)
+            empty += e
+            w -= 1        
+        return empty
 
     def depth_wells(self):
         # sum of depth of wells
@@ -504,6 +520,7 @@ class TetrisApp(object):
         space_filled = self.win_filled()
         num_row_holes = self.number_row_with_holes()
         wells = self.depth_wells()
+        offset = ((1 + self.board_height) * self.board_height / 2) * self.board_width 
 
         if ver is None:
             # genetic algorithm in Stevens' paper
@@ -540,9 +557,15 @@ class TetrisApp(object):
             new_fit = -1 * wells
         elif ver == 10:
             new_fit = -1 * max_h
+        elif ver == 11:
+            empty_c = self.empty_cell()
+            
+            new_fit = -1 * empty_c + offset
+            new_fit = new_fit / offset  # Normalisation
 
 
-        rew = new_fit - self.fitness_val
+        # rew = new_fit - self.fitness_val
+        rew = new_fit
         self.fitness_val = new_fit
         return rew
 
@@ -769,7 +792,7 @@ class TetrisEnv(gym.Env):
 
     def __init__(self):
         self.game = TetrisApp()
-        self.action_space = spaces.Discrete(10)
+        self.action_space = spaces.Discrete(4)
         self.observation_space = spaces.Box(low=0, high=255,
         shape=(self.game.height, self.game.width, 3), dtype=np.uint8)
         self.shape = (self.game.height, self.game.width)
@@ -797,7 +820,8 @@ class TetrisEnv(gym.Env):
         window_filled = self.game.win_filled()
         num_row_hole = self.game.number_row_with_holes()
         wells = self.game.depth_wells()
-        return (cl_lines, holes, height, bumpiness, window_filled, num_row_hole, wells)
+        empty_cells = self.game.empty_cell()
+        return (cl_lines, holes, height, bumpiness, window_filled, num_row_hole, wells, empty_cells)
 
     def step(self, action):
         """ 
@@ -1026,6 +1050,8 @@ class TetrisPreprocessing(gym.Wrapper):
 
     def heuristic_state(self):
         cl_lines = self.cleared_lines_buffer
+        h_state = self.env.heuristic_state()
+        new_h_state = (cl_lines,) + h_state[1:]
         # print("h state", cl_lines)
         holes = self.game.number_of_holes()
         height, _, _ = self.game.total_height()
@@ -1033,7 +1059,8 @@ class TetrisPreprocessing(gym.Wrapper):
         window_filled = self.game.win_filled()
         num_row_hole = self.game.number_row_with_holes()
         wells = self.game.depth_wells()
-        return (cl_lines, holes, height, bumpiness, window_filled, num_row_hole, wells)
+        
+        return new_h_state  # (cl_lines, holes, height, bumpiness, window_filled, num_row_hole, wells)
 
     def reset(self, **kwargs):
         # NoopReset
@@ -1074,31 +1101,36 @@ ACTION_LOOKUP = {
     0 : 'NONE',
     1 : 'LEFT',
     2 : 'RIGHT',
-    3 : 'ROTATE', # Used on defense to slide tackle the ball
-    4 : 'INSDROP',  # Used only by goalie to catch the ball
-    5 : 'DOWN',
-    6 : 'ROTATE+LEFT',
-    7 : 'ROTATE+RIGHT',
-    8 : 'ROTATE+INSD',
-    9 : 'ROTATE+DOWN'
+    3 : 'DOWN',
+    # 4 : 'ROTATE', # Used on defense to slide tackle the ball
+    # 5 : 'INSDROP',  # Used only by goalie to catch the ball
+    # 6 : 'ROTATE+LEFT',
+    # 7 : 'ROTATE+RIGHT',
+    # 8 : 'ROTATE+INSD',
+    # 9 : 'ROTATE+DOWN'
 }
 
 # For testing
 if __name__ == '__main__':
     import os
     os.environ["SDL_VIDEODRIVER"] = "dummy"
-    FRAMESTACK = False
+    FRAMESTACK = True
     PREPROCESS = True
     from gym.wrappers.monitoring import video_recorder
     # enable logging
     gym.logger.set_level(gym.logger.DEBUG)
-    
+    screen_crop = {
+        (8, 6): (150, 110),
+        (10, 8): (180, 150),
+        (12, 10): (216, 200)
+    }
+
     
     if FRAMESTACK:
         game = TetrisEnv()
-        game = CropObservation(game, (216, 200))
-        game = HeuristicReward(game, ver=3)
-        game = TetrisPreprocessing(game, frame_skip=3)
+        game = CropObservation(game, screen_crop[(rows, cols)])
+        game = HeuristicReward(game, ver=11)
+        game = TetrisPreprocessing(game, frame_skip=0)
         game = FrameStack(game,4)
         vid = video_recorder.VideoRecorder(game,path="./recording/vid_test.mp4")
         # game = gym.wrappers.Monitor(game, "./recording/vid_test.mp4", video_callable=lambda episode_id: True,force=True)
@@ -1118,14 +1150,15 @@ if __name__ == '__main__':
         print(x_t1.shape)
         x_t1 = np.concatenate(x_t1, axis=1) 
         cv2.imwrite("framestack" + ".png", x_t1)
-        for i in range(20):
-            # action = game.action_space.sample()
+        for i in range(30):
+            action = game.action_space.sample()
             # action = 4
             # vid.capture_frame()
             game.render()
-            action = int(input())
+            # action = int(input())
             print("%i action %i" % (i,action))
             x_t2, reward1, done1 = game.step(action)
+            # print("count", (np.unique(x_t2, return_counts=True)))
             print("reward", reward1)
             # print(x_t2.shape)
             if not PREPROCESS:

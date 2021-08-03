@@ -7,6 +7,9 @@ import matplotlib.pyplot as plt
 from collections import namedtuple, deque
 from itertools import count
 from PIL import Image
+import pandas as pd
+from datetime import datetime
+import pathlib
 
 import torch
 import torch.nn as nn
@@ -127,7 +130,7 @@ def plot(episode, total_rewards, rewards, losses, cleared_lines, epsilons=None):
     plt.subplot(224)
     plt.title("loss")
     plt.xlabel("step")
-    plt.ylim(0, 20)
+    plt.ylim(0, 0.1)
     plt.plot(losses)    
     
     plt.pause(0.01)
@@ -178,7 +181,8 @@ def optimize_model():
     # Compute Huber loss
     criterion = nn.SmoothL1Loss()
     loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
-    # print("loss", loss)
+    # print("loss", type(loss))
+    # print(loss, loss.item())
 
     # Optimize the model
     optimizer.zero_grad()
@@ -186,10 +190,13 @@ def optimize_model():
     for param in policy_net.parameters():
         param.grad.data.clamp_(-1, 1)
     optimizer.step()
-    return loss
+    return loss.item()
 
-def train(env, num_episodes, check_point, render=False, train_ver=0, record_point=None):
-    saving_path = './model_saving'
+def train(env, board_size, num_episodes, check_point, render=False, train_ver=0, record_point=None, start_episode=0):
+    today = datetime.now()
+    saving_path = './model_saving/' + today.strftime('%m%d%H%M') + '_' + str(board_size)
+    model_dir = pathlib.Path(saving_path)
+    model_dir.mkdir(parents=True, exist_ok=True)
     losses = []
     rewards = []
     each_reward = []
@@ -197,7 +204,15 @@ def train(env, num_episodes, check_point, render=False, train_ver=0, record_poin
     episode_durations = []
     if record_point is not None:
         from gym.wrappers.monitoring import video_recorder
-    for i_episode in range(num_episodes):
+        video_path = "./recording/" + today.strftime('%m%d%H%M') + '_' + str(board_size)
+        video_dir = pathlib.Path(video_path)
+        try: 
+            video_dir.mkdir(parents=True, exist_ok=True)  # if parent path is not existing, create it 
+        except FileExistsError as error: 
+            print(error)
+        
+    for i_episode in range(start_episode+1, num_episodes+1):
+        # print("i_ep", i_episode)
         # Initialize the environment and state
         state = get_torch_screen(env.reset())
         # print("state shape", state.shape)
@@ -206,12 +221,15 @@ def train(env, num_episodes, check_point, render=False, train_ver=0, record_poin
         
         record = False
         if record_point is not None:
-            from gym.wrappers.monitoring import video_recorder
+            # from gym.wrappers.monitoring import video_recorder
             if i_episode in record_point:
-                vid = video_recorder.VideoRecorder(env, path="./recording/vid_v%s_%s.mp4" %(train_ver, i_episode))
+                vid = video_recorder.VideoRecorder(env, path=video_path + "/vid_v%s_%s.mp4" %(train_ver, i_episode))
                 record = True
+                re= 0
                 print("record start:", i_episode)
-            elif i_episode in [x+40 for x in record_point]:
+            elif record and re < 40:
+                re += 1
+            elif record and re == 40:
                 vid.enabled = False
                 vid.close()
                 record = False
@@ -226,6 +244,7 @@ def train(env, num_episodes, check_point, render=False, train_ver=0, record_poin
                 time.sleep(0.02)
             if record:
                 vid.capture_frame()
+                re += 1
 
             next_state, reward, done = env.step(action.item())
             next_state = get_torch_screen(next_state)
@@ -279,24 +298,54 @@ def train(env, num_episodes, check_point, render=False, train_ver=0, record_poin
 
                 
         if i_episode in check_point:
-                torch.save(policy_net, "%s/%s_%s_v%s.pth" % (saving_path, "DQN", i_episode, train_ver))
-                torch.save({
-                            'episode': i_episode,
-                            'model_state_dict': policy_net.state_dict(),
-                            'target_state_dict': target_net.state_dict(),
-                            'optimizer_state_dict': optimizer.state_dict(),
-                            'loss': loss,
-                            # 'learning rate': lr,   # if it is Adam
-                            }, "%s/%s_%s_train_v%s.pth" % (saving_path, "DQN", i_episode, train_ver))   # save for later training
+            torch.save(policy_net, "%s/%s_%s_v%s.pth" % (saving_path, "DQN", i_episode, train_ver))
+            torch.save({
+                        'episode': i_episode,
+                        'model_state_dict': policy_net.state_dict(),
+                        'target_state_dict': target_net.state_dict(),
+                        'optimizer_state_dict': optimizer.state_dict(),
+                        'loss': loss,
+                        # 'learning rate': lr,   # if it is Adam
+                        }, "%s/%s_%s_train_v%s.pth" % (saving_path, "DQN", i_episode, train_ver))   # save for later training
 
     print('Complete')
+    
+    
+    # Create new folder by date
+    path = "./results/" + today.strftime('%m%d%H%M') + '_' + str(board_size)
+    new_dir = pathlib.Path(path)
+    try: 
+        new_dir.mkdir(parents=True, exist_ok=True)  # if parent path is not existing, create it 
+    except FileExistsError as error: 
+        print(error)
+    # Store results data
+    data1 = {"rewards by ep": rewards}
+    data2 = {"loss by step": losses}
+    data3 = {"reward by step": each_reward}
+    data4 = {"cleared lines by ep": cleared_lines}
+    df1 = pd.DataFrame(data1)
+    df2 = pd.DataFrame(data2)
+    df3 = pd.DataFrame(data3)
+    df4 = pd.DataFrame(data4)
+    p1 = 'rewards_v{}.csv'.format(train_ver)
+    p2 = 'loss_v{}.csv'.format(train_ver)
+    p3 = 'step_reward_v{}.csv'.format(train_ver)
+    p4 = 'lines_v{}.csv'.format(train_ver)
+    df1.to_csv(new_dir/p1)
+    df2.to_csv(new_dir/p2)
+    df3.to_csv(new_dir/p3)
+    df4.to_csv(new_dir/p4)
+    plt.savefig(path + '/DQN_ep{}_v{}.png'.format(num_episodes, train_ver), bbox_inches='tight')
     # Average cleared lines of last 100 games, if over some benchmark, save the model for testing
     last_100 = cleared_lines[-100:]
     avg_100 = sum(last_100) // len(last_100)
     if avg_100 > 0:
-        torch.save(policy_net, "%s/%s_%s.pth" % (saving_path, "DQN_avg100", avg_100))
-    # 
-    plt.savefig('%s/DQN_ep%s_v%s.png' % ('results', num_episodes, train_ver), bbox_inches='tight') 
+        try:
+            file_name = saving_path + "{}/{}_{}_v{}.pth".format(saving_path, "DQN_avg100", avg_100, train_ver)
+            torch.save(policy_net, file_name)
+        except Exception:
+            pass
+
     env.close()
     plt.ioff()
     # plt.show(block=True)
@@ -337,17 +386,24 @@ if __name__ == '__main__':
     # Test for CartPole env
     # env = gym.make('CartPole-v0').unwrapped
 
+    screen_crop = {
+        6: (150, 110),
+        8: (180, 150),
+        10: (216, 200)
+    }
     # Train for Tetris
-    reward_ver = 10
+    reward_ver = 11
+    # reward_ver = 10
+    board_size = 8
     env = TetrisEnv()
-    env = CropObservation(env, (216, 200))
+    env = CropObservation(env, screen_crop[board_size])  # 6x8: (150, 110) 10x12: (216, 200)
     env = HeuristicReward(env, ver=reward_ver)
-    env = TetrisPreprocessing(env, screen_size=84, frame_skip=2)
+    env = TetrisPreprocessing(env, screen_size=84, frame_skip=0)
     env = FrameStack(env,4)
 
     plt.ion()
 
-    BATCH_SIZE = 128
+    BATCH_SIZE = 32
     GAMMA = 0.999
     EPS_START = 0.9
     EPS_END = 0.05
@@ -355,8 +411,7 @@ if __name__ == '__main__':
     TARGET_UPDATE = 200
     in_channels = 4  # due to frame stack
     lr = 0.0001
-    check_point = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 
-            3000, 5000, 10000, 50000, 100000, 300000, 500000]
+    
 
 
     screen_shape = env.observation_space.shape[1:]
@@ -400,14 +455,25 @@ if __name__ == '__main__':
     # Training and testing
     plt.ion()
     plt.figure(figsize=(15, 10))
-    num_episodes = 3000
-    record_point = [300, 500, 1000, 2000, num_episodes-50]
+    num_episodes = 800
+    check_point = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 
+            3000, 5000, 10000, 50000, 100000, 300000, 500000]
+    record_point = [100, 150, 250, 350, 450, 1000, 2000, num_episodes-50]
     # record_point = [10, 20, 40]
-    train(env, num_episodes, check_point, render=True, train_ver=reward_ver, record_point=record_point)
-    reward_ver = 10
-    # restart env
-    train(env, num_episodes, check_point, render=True, train_ver=reward_ver,record_point=record_point)
-    # torch.save(policy_net, "dqn_tetris_model")
-    # policy_net = torch.load("model_saving/DQN_600.pth")
+    # record_point = None
+    # Resume training
+    # ckpt = torch.load("model_saving/08021854_8/DQN_500_train_v11.pth")
+    # policy_net.load_state_dict(ckpt['model_state_dict'])
+    # target_net.load_state_dict(ckpt['target_state_dict'])
+    # optimizer.load_state_dict(ckpt['optimizer_state_dict'])
 
-    # test(env, 20, policy_net, render=True)
+    start_episode = 0
+    train(env, board_size, num_episodes, check_point, render=True, train_ver=reward_ver, record_point=record_point, start_episode=start_episode)
+    
+    # reward_ver = 10
+    # # restart env
+    # train(env, board_size, num_episodes, check_point, render=True, train_ver=reward_ver,record_point=record_point)
+    # torch.save(policy_net, "dqn_tetris_model")
+    # policy_net = torch.load("model_saving/08030254_8/DQN_800_v11.pth")
+
+    # test(env, 50, policy_net, render=True)

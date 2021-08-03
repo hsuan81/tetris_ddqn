@@ -7,6 +7,10 @@ import matplotlib.pyplot as plt
 from collections import namedtuple, deque
 from itertools import count
 from PIL import Image
+import pandas as pd
+import os
+from datetime import datetime
+import pathlib
 
 import torch
 import torch.nn as nn
@@ -263,7 +267,7 @@ plt.ion()
 plt.figure(figsize=(15, 10))
 losses = []
 rewards = []
-num_episodes = 30
+num_episodes = 10
 record = True
 
 
@@ -337,6 +341,17 @@ for i_episode in range(num_episodes):
 
 
 print('Complete')
+today = datetime.now()
+path = "./results/" + today.strftime('%m%d')
+new_dir = pathlib.Path(path)
+try: 
+    new_dir.mkdir(parents=True, exist_ok=True)  # if parent path is not existing, create it 
+except FileExistsError as error: 
+    print(error)  
+data = {"rewards": rewards}
+df = pd.DataFrame(data)
+p = 'store_reward_testing{}.csv'.format(123)
+df.to_csv(new_dir/p)
 # env.render()
 env.close()
 plt.ioff()

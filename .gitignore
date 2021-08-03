@@ -2,3 +2,6 @@
 model_saving
 utils/__pycache__
 *.png
+recording
+results
+*.csv
