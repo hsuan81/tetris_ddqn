@@ -1,5 +1,5 @@
 import numpy as np
-import os, subprocess, time, signal
+import os, subprocess, time, signal, copy
 import gym
 from gym import error, spaces
 from gym import utils
@@ -31,7 +31,7 @@ import pygame, sys
 """
 
 # The configuration
-cell_size = 18
+cell_size = 18  # original: 18
 cols =      8  # standard game col is 10
 rows =      10  # standard game row is 22
 maxfps =    300
@@ -84,7 +84,7 @@ def check_collision(board, shape, offset):
     for cy, row in enumerate(shape):
         for cx, cell in enumerate(row):
             try:
-                if cell and board[ cy + off_y ][ cx + off_x ]:
+                if cell and board[ cy + off_y][ cx + off_x]:
                     return True
             except IndexError:
                 return True
@@ -98,7 +98,7 @@ def join_matrixes(mat1, mat2, mat2_off):
     off_x, off_y = mat2_off
     for cy, row in enumerate(mat2):
         for cx, val in enumerate(row):
-            mat1[cy+off_y-1 ][cx+off_x] += val
+            mat1[cy+off_y-1][cx+off_x] += val
     return mat1
 
 def new_board():
@@ -113,6 +113,7 @@ class TetrisApp(object):
     def __init__(self, show_next_stone=False):
         pygame.init()
         # pygame.key.set_repeat(250,25)
+        self.cell_size = cell_size
         self.width = cell_size*(cols+6)
         self.height = cell_size*rows
         self.rlim = cell_size*cols
@@ -135,7 +136,7 @@ class TetrisApp(object):
         self.next_stone = tetris_shapes[rand(len(tetris_shapes))]
         self.stone_x = int(cols / 2 - len(self.stone[0])/2)
         self.stone_y = 0
-        self.stone_change = True
+        # self.stone_change = True
 
         if check_collision(self.board,
                            self.stone,
@@ -188,6 +189,7 @@ class TetrisApp(object):
               self.height // 2-msgim_center_y+i*22))
 
     def draw_matrix(self, matrix, offset):
+        # print("matrix", matrix)
         off_x, off_y  = offset
         for y, row in enumerate(matrix):
             for x, val in enumerate(row):
@@ -227,28 +229,66 @@ class TetrisApp(object):
                 new_x = 0
             if new_x > cols - len(self.stone[0]):
                 new_x = cols - len(self.stone[0])
+                
             if not check_collision(self.board,
                                    self.stone,
                                    (new_x, self.stone_y)):
                 self.stone_x = new_x
+            # else:
+            #     self.stone_change = True
 
     def quit(self):
         """ Exit the game. """
         self.center_msg("Exiting...")
         pygame.display.update()
         sys.exit()
+    def check_after_drop(self):
+        if check_collision(self.board,
+                               self.stone,
+                               (self.stone_x, self.stone_y+1)):
+            self.stone_change = True
+            self.board = join_matrixes(
+                self.board,
+                self.stone,
+                (self.stone_x, self.stone_y))
+            # print("after", self.board)
+            self.new_stone()
+            cleared_rows = 0
+            while True:
+                for i, row in enumerate(self.board[:-1]):
+                    if 0 not in row:
+                        self.board = remove_row(
+                            self.board, i)
+                        cleared_rows += 1
+                        break
+                else:
+                    break
+                # print("cleared rows", cleared_rows)
+            self.add_cl_lines(cleared_rows)  # compute result
+            return True
+        return False
 
-    def drop(self, manual):
+    def drop(self):
         """ The piece drop automatically if manual is False or drops forcely if True. """
         if not self.gameover and not self.paused:
             self.stone_y += 1
+            # print("stone y", self.stone_y)
+            # print("drop")
+
+            # new_y = self.stone_y + 1
+            # if not check_collision(self.board, self.stone, (self.stone_x, new_y)):
+            #     self.stone_y = new_y
+
             if check_collision(self.board,
                                self.stone,
                                (self.stone_x, self.stone_y)):
+                # print("before", self.board)
+                self.stone_change = True
                 self.board = join_matrixes(
                   self.board,
                   self.stone,
                   (self.stone_x, self.stone_y))
+                # print("after", self.board)
                 self.new_stone()
                 cleared_rows = 0
                 while True:
@@ -267,7 +307,7 @@ class TetrisApp(object):
 
     def insta_drop(self):
         if not self.gameover and not self.paused:
-            while(not self.drop(True)):
+            while(not self.drop()):
                 pass
 
     def rotate_stone(self):
@@ -277,6 +317,9 @@ class TetrisApp(object):
                                    new_stone,
                                    (self.stone_x, self.stone_y)):
                 self.stone = new_stone
+            # else:
+            #     self.stone_change = True
+
                 
 
     def toggle_pause(self):
@@ -330,6 +373,46 @@ class TetrisApp(object):
 
     def landing_height(self):
         pass
+
+    def falling_reward(self):
+        value = 0
+        # row_weight = [0] * (len(self.board) - 4) + [1, 1, 2, 2]  # simple version
+        row_weight = [0.0, 0.0] + [0.5 ** x for x in range(self.board_height-2, 0, -1)]
+        for cy, row in enumerate(self.stone):
+            w = row_weight[cy + self.stone_y]
+            c = sum(x > 0 for x in row)
+            value += w * c
+            # print("row value", value)
+        return value
+
+
+    def graph_value(self):
+        value = 0
+        w = 0
+        board = copy.deepcopy(self.board[:-1])
+        row_weight = [0] * (len(board) - 2) + [1, 2]
+        # row_weight = [0, 0] + [i for i in range(1, len(self.board[0])+1)]
+        # print("row w", row_weight)
+        # check the current piece position
+        if check_collision(self.board,
+                               self.stone,
+                               (self.stone_x, self.stone_y+1)):
+            # print("add stone value")
+            board = join_matrixes(board, self.stone, (self.stone_x, self.stone_y+1))
+            # print("add to board", board)
+
+        for i, row in enumerate(board):
+            w = row_weight[i]
+            c = sum(x > 0 for x in row)
+            value += w * c
+
+        
+        
+            # for cy, row in enumerate(self.stone):
+            #     w = row_weight[self.stone_x + cy]
+            #     c = sum(x > 0 for x in row)
+            #     value += w * c
+        return value
 
     def empty_cell(self):
         _, max_h, _ = self.total_height()
@@ -510,6 +593,8 @@ class TetrisApp(object):
 
         return total_bumpiness, max_bumpiness
 
+    
+
     def fitness_reward(self, ver=None):
         a, b, c, d = -0.51, 0.76, -0.36, -0.18
         lines = self.clear_lines()
@@ -559,15 +644,24 @@ class TetrisApp(object):
             new_fit = -1 * max_h
         elif ver == 11:
             empty_c = self.empty_cell()
-            
+            offset = ((1 + self.board_height) * self.board_height / 2) * self.board_width 
             new_fit = -1 * empty_c + offset
             new_fit = new_fit / offset  # Normalisation
+
+        elif ver == 12:
+            normal = 24
+            graph_val = self.graph_value()
+            new_fit = graph_val / normal 
+        
+        elif ver == 13:
+            falling_val = self.falling_reward()
+            new_fit = falling_val
 
 
         # rew = new_fit - self.fitness_val
         rew = new_fit
         self.fitness_val = new_fit
-        return rew
+        return rew  + lines
 
     def _combo_actions(self, move):
         if move == 0:
@@ -581,16 +675,16 @@ class TetrisApp(object):
             self.insta_drop()
         elif move == 3:
             self.rotate_stone()
-            self.drop(True)
+            self.drop()
 
 
     def _handle_actions(self, action):
         key_actions = {
-            'NONE':         self.drop(False),
+            'NONE':         None, # self.drop(),
             'ESCAPE':       self.quit,  # not use
             'LEFT':         lambda:self.move(-1),
             'RIGHT':        lambda:self.move(+1),
-            'DOWN':         lambda:self.drop(True),
+            'DOWN':         lambda:self.drop(),
             'ROTATE':       self.rotate_stone,
             'ROTATE+LEFT':  lambda:self._combo_actions(0),
             'ROTATE+RIGHT': lambda:self._combo_actions(1),
@@ -603,16 +697,23 @@ class TetrisApp(object):
 
         action_type = ACTION_LOOKUP[action]
         # If the action is not no operation, take the action
+        self.drop()
+        # self.check_after_drop()
         if action > 0:
             key_actions[action_type]()
+            # print("action done")
+        # if not self.stone_change:
+        #     print("no change")
+        #     self.drop()
+        #     self.check_after_drop()
 
         # if not self.stone_change:
         #     self.drop(False)  # piece goes down one step whenever one action(including no operation) was taken
 
         self.stone_change = False
-        for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    self.quit()
+        # for event in pygame.event.get():
+        #         if event.type == pygame.QUIT:
+        #             self.quit()
     
     def _draw_screen(self, train=True):
         self.screen.fill((0,0,0))
@@ -684,6 +785,7 @@ Press space to continue""" % self.score)
             self.cl_lines = 0
         if action is not None:
             self._handle_actions(action)
+            # print("take action")
         
         self._draw_screen()
         pygame.display.update()
@@ -719,7 +821,7 @@ Press space to continue""" % self.score)
             'ESCAPE':   self.quit,
             'LEFT':     lambda:self.move(-1),
             'RIGHT':    lambda:self.move(+1),
-            'DOWN':     lambda:self.drop(True),
+            'DOWN':     lambda:self.drop(),
             'UP':       self.rotate_stone,
             'p':        self.toggle_pause,
             'SPACE':    self.reset,
@@ -760,7 +862,7 @@ Press space to continue""" % self.score)
 
             for event in pygame.event.get():
                 if event.type == pygame.USEREVENT+1:
-                    self.drop(False)
+                    self.drop()
                 elif event.type == pygame.QUIT:
                     self.quit()
                 elif event.type == pygame.KEYDOWN:
@@ -796,6 +898,7 @@ class TetrisEnv(gym.Env):
         self.observation_space = spaces.Box(low=0, high=255,
         shape=(self.game.height, self.game.width, 3), dtype=np.uint8)
         self.shape = (self.game.height, self.game.width)
+        self.cell_size = self.game.cell_size
         self.viewer = None
 
     def _seed(self, seed=None):
@@ -928,17 +1031,67 @@ class FrameStack(gym.Wrapper):
     # np.concatenate(list(self.frames), axis=1)  
     return np.stack(self.frames, axis=0)
 
-class CropObservation(gym.ObservationWrapper):
-    r"""Downsample the image observation to a square image. """
-    def __init__(self, env, shape):
-        super(CropObservation, self).__init__(env)
-        if isinstance(shape, int):
-            shape = (shape, shape)
-        assert all(x > 0 for x in shape), shape
-        self.shape = tuple(shape)
+def get_resized_ob(ob, board_width, cell_width, reduce_pixel=False):
+    """ Crop the image to keep only the game board and reduce one cell to one pixel if required.
+    Args:
+    ob (2-dim list): observation to be modified.
+    board_width (int): the board version of the Tetris game
+    cell_width (int): the width for one grid in the game.
+    reduce_pixel (bool): if True the observation will be reduced to one cell equivalent to one pixel, 
+                        otherwise, the pixel number remains.
+    """
+    ob_edge = board_width*cell_width
+    ob = [ r[:ob_edge] for r in ob]
+    if reduce_pixel:
+        reduced_board = []
+        screen_width = len(ob[0])
+        screen_height = len(ob)
+        for r in range(0, screen_height, cell_width):
+            row = ob[r]
+            new_r = []
+            for c in range(0, screen_width, cell_width):
+                new_r.append(row[c])
+            reduced_board.append(new_r)
+        ob = reduced_board
 
-        obs_shape = self.shape + self.observation_space.shape[2:]
-        self.observation_space = spaces.Box(low=0, high=255, shape=obs_shape, dtype=np.uint8)
+    return np.array(ob)
+
+
+# Discarded in this case
+class CropObservation(gym.ObservationWrapper):
+    r""" Crop and scale down the image observation to desirable size. 
+    Args:
+        env (Env): environment
+        reduce_pixel (bool): if True one cell will be reduced to one pixel, otherwise, remain the same cell size.
+        reduce_rate (int): the original width of one cell. 
+        crop (bool): if True, then the score panel of the game is discarded, otherwise the panel remains. 
+        board_width (int): the number of cell in one row. If the crop=False, this is None by default.
+    """
+    def __init__(self, env, reduce_pixel=False, crop=True, board_width=None):
+        super(CropObservation, self).__init__(env)
+        # if isinstance(shape, int):
+        #     shape = (shape, shape)
+        # assert all(x > 0 for x in shape), shape
+        # self.shape = tuple(shape)
+        
+        self.shape = self.observation_space.shape
+        self.reduce_pixel = reduce_pixel
+        self.cell_width = env.cell_size
+        self.board_width = board_width
+        self.crop = crop
+
+        if crop:
+            width = self.cell_width * board_width
+            height = self.shape[0]
+            self.shape = (height, width, self.shape[2])
+        if reduce_pixel:
+            width = self.shape[1] // self.cell_width
+            height = self.shape[0] // self.cell_width
+            self.shape = (height, width, self.shape[2])
+        # obs_shape = self.shape + self.observation_space.shape[2:]
+        self.observation_space = spaces.Box(low=0, high=255, shape=self.shape, dtype=np.uint8)
+
+        
 
     # def reset(self, **kwargs):
     #     observation = self.env.reset(**kwargs)
@@ -948,14 +1101,149 @@ class CropObservation(gym.ObservationWrapper):
         observation, reward, done = self.env.step(action)
         return self.observation(observation), reward, done
 
+    def reset(self):
+        obs = self.env.reset()
+        return self.observation(obs)
+
     def observation(self, observation):
-        observation = observation[:self.shape[0], :self.shape[1]]
+        def reduce_to_one_pixel(cell_width, observation):
+            ob = observation
+            screen_width = len(ob[0])
+            screen_height = len(ob)
+            # print("reduce", screen_height, screen_width)
+            ob = observation[:screen_height:cell_width, :screen_width:cell_width]
+            return ob
+
+        
+
+        # print("shape", self.shape)
+        # print("original shape", observation.shape)
+
+        if self.reduce_pixel:
+            observation = reduce_to_one_pixel(self.cell_width, observation)
+        # print("reduced", observation.shape)
+       
+        if self.crop:
+            observation = observation[:, :self.shape[1]]
+
+        # print("croped", observation.shape)
+        
+        observation = np.array(observation)
         if observation.ndim == 2:
             observation = np.expand_dims(observation, -1)
         return observation
 
-# Modified from https://github.com/openai/gym/blob/master/gym/wrappers/atari_preprocessing.py
 class TetrisPreprocessing(gym.Wrapper):
+    def __init__(self, env, noop_max=0, frame_skip=4, grayscale_obs=True, grayscale_newaxis=False, scale_obs=False):
+        super().__init__(env)
+        assert cv2 is not None, \
+            "opencv-python package not installed! Try running pip install gym[atari] to get dependencies  for atari"
+        assert frame_skip >= 0
+        
+        self.env = env
+        self.noop_max = noop_max
+        self.frame_skip = frame_skip
+        self.grayscale_obs = grayscale_obs
+        self.grayscale_newaxis = grayscale_newaxis
+        self.scale_obs = scale_obs
+        self.curr_ob = None
+        self.cleared_lines_buffer = 0
+
+        # buffer of most recent two observations for max pooling (not using in Tetris case)
+        if grayscale_obs:
+            self.obs_buffer = [np.empty(env.observation_space.shape[:2], dtype=np.uint8),
+                               np.empty(env.observation_space.shape[:2], dtype=np.uint8)]
+        else:
+            self.obs_buffer = [np.empty(env.observation_space.shape, dtype=np.uint8),
+                               np.empty(env.observation_space.shape, dtype=np.uint8)]
+        
+        self.game_over = False
+
+        _low, _high, _obs_dtype = (0, 255, np.uint8) if not scale_obs else (0, 1, np.float32)
+        _shape = self.observation_space.shape[:2] + (1 if grayscale_obs else 3,)
+        if grayscale_obs and not grayscale_newaxis:
+            _shape = _shape[:-1]  # Remove channel axis
+        self.observation_space = spaces.Box(low=_low, high=_high, shape=_shape, dtype=_obs_dtype)
+        self.shape = self.observation_space.shape
+
+    def step(self, action):
+        R = 0.0
+        self.cleared_lines_buffer = 0
+
+        for t in range(self.frame_skip if self.frame_skip > 0 else 1):
+            self.curr_ob, reward, done = self.env.step(action)
+            # print("t reward", reward)
+            # print(self.env.heuristic_state())
+            R += reward
+            self.game_over = done
+            self.cleared_lines_buffer += self.env.cleared_lines()
+
+            if done:
+                break
+            if t == self.frame_skip - 2:
+                if self.grayscale_obs:
+                    pass
+                else:
+                    pass
+            elif t == self.frame_skip - 1:
+                # if self.grayscale_obs:
+                #     # self.ale.getScreenGrayscale(self.obs_buffer[0])
+                #     pass
+                # else:
+                    # # self.ale.getScreenRGB2(self.obs_buffer[0])
+                    pass
+        return self._get_obs(), R, done
+
+    def heuristic_state(self):
+        cl_lines = self.cleared_lines_buffer
+        h_state = self.env.heuristic_state()
+        new_h_state = (cl_lines,) + h_state[1:]
+        # print("h state", cl_lines)
+        # holes = self.game.number_of_holes()
+        # height, _, _ = self.game.total_height()
+        # bumpiness, _ = self.game.bumpiness()
+        # window_filled = self.game.win_filled()
+        # num_row_hole = self.game.number_row_with_holes()
+        # wells = self.game.depth_wells()
+        
+        return new_h_state  # (cl_lines, holes, height, bumpiness, window_filled, num_row_hole, wells)
+
+    def reset(self, **kwargs):
+        # NoopReset
+        self.curr_ob = self.env.reset()
+        noops = np.randint(1, self.noop_max + 1) if self.noop_max > 0 else 0
+        for _ in range(noops):
+            _, _, done, _ = self.env.step(0)
+            if done:
+                self.env.reset()
+
+        if self.grayscale_obs:
+            ob = self._get_obs()
+        else:
+            ob = self.env.reset()
+        # self.obs_buffer[1].fill(0)
+        return ob
+
+    def _get_obs(self):
+        # if self.frame_skip > 1:  # more efficient in-place pooling
+        #     np.maximum(self.obs_buffer[0], self.obs_buffer[1], out=self.obs_buffer[0])
+        obs = self.curr_ob
+        if self.scale_obs:
+            obs = np.asarray(obs, dtype=np.float32) / 255.0
+        else:
+            obs = np.asarray(obs, dtype=np.uint8)
+
+        if self.grayscale_obs:
+            obs = cv2.cvtColor(obs, cv2.COLOR_BGR2GRAY)
+            ret, obs = cv2.threshold(obs,1,255,cv2.THRESH_BINARY)
+
+        if self.grayscale_obs and self.grayscale_newaxis:
+            obs = np.expand_dims(obs, axis=-1)  # Add a channel axis
+        return obs
+
+
+# Modified from https://github.com/openai/gym/blob/master/gym/wrappers/atari_preprocessing.py
+class DiscardTetrisPreprocessing(gym.Wrapper):
     r"""Atari 2600 preprocessings. 
     This class follows the guidelines in 
     Machado et al. (2018), "Revisiting the Arcade Learning Environment: 
@@ -991,7 +1279,8 @@ class TetrisPreprocessing(gym.Wrapper):
         assert cv2 is not None, \
             "opencv-python package not installed! Try running pip install gym[atari] to get dependencies  for atari"
         assert frame_skip >= 0
-        assert screen_size > 0
+        if resize:
+            assert screen_size > 0
         
         self.env = env
         self.noop_max = noop_max
@@ -1110,6 +1399,10 @@ ACTION_LOOKUP = {
     # 9 : 'ROTATE+DOWN'
 }
 
+def print_table(ob):
+    for o in ob:
+        print(o, end='\n')
+
 # For testing
 if __name__ == '__main__':
     import os
@@ -1121,25 +1414,25 @@ if __name__ == '__main__':
     gym.logger.set_level(gym.logger.DEBUG)
     screen_crop = {
         (8, 6): (150, 110),
-        (10, 8): (180, 150),
+        (10, 8): (10, 8),#(180, 150),
         (12, 10): (216, 200)
     }
 
     
     if FRAMESTACK:
         game = TetrisEnv()
-        game = CropObservation(game, screen_crop[(rows, cols)])
-        game = HeuristicReward(game, ver=11)
-        game = TetrisPreprocessing(game, frame_skip=0)
-        game = FrameStack(game,4)
+        game = CropObservation(game, reduce_pixel=True, crop=True, board_width=cols)
+        game = HeuristicReward(game, ver=13)
+        game = TetrisPreprocessing(game, frame_skip=0, grayscale_obs=True, grayscale_newaxis=False, scale_obs=False)
+        # game = FrameStack(game,4)
         vid = video_recorder.VideoRecorder(game,path="./recording/vid_test.mp4")
         # game = gym.wrappers.Monitor(game, "./recording/vid_test.mp4", video_callable=lambda episode_id: True,force=True)
         
         print("Test begins")
         x_t1 = game.reset()
         vid.capture_frame()
-        print(game.observation_space.shape)
-        print(x_t1.shape)
+        print("test1",game.observation_space.shape)
+        print("test1-1",x_t1.shape)
         # ob = np.concatenate(ob, axis=1)
         # print(ob.shape)
         if not PREPROCESS:
@@ -1147,15 +1440,18 @@ if __name__ == '__main__':
             ret, x_t1 = cv2.threshold(x_t1,1,255,cv2.THRESH_BINARY)
             x_t1 = np.reshape(x_t1, (288, -1, 1))
             print("no preprocess")
-        print(x_t1.shape)
-        x_t1 = np.concatenate(x_t1, axis=1) 
+        # print(x_t1.shape)
+        print(x_t1)
+        # print(get_resized_ob(x_t1, cols, cell_size, reduce_pixel=True))
+        # print_table(get_resized_ob(x_t1, cols, cell_size, reduce_pixel=True))
+        # x_t1 = np.concatenate(x_t1, axis=1) 
         cv2.imwrite("framestack" + ".png", x_t1)
-        for i in range(30):
-            action = game.action_space.sample()
+        for i in range(50):
+            # action = game.action_space.sample()
             # action = 4
             # vid.capture_frame()
             game.render()
-            # action = int(input())
+            action = int(input())
             print("%i action %i" % (i,action))
             x_t2, reward1, done1 = game.step(action)
             # print("count", (np.unique(x_t2, return_counts=True)))
@@ -1165,7 +1461,9 @@ if __name__ == '__main__':
                 x_t2 = cv2.cvtColor(x_t2, cv2.COLOR_BGR2GRAY)
             # ret, x_t2 = cv2.threshold(x_t2,1,255,cv2.THRESH_BINARY)
             # x_t2 = np.reshape(x_t2, (288, -1, 1))
-            x_t2 = np.concatenate(list(x_t2), axis=1)
+            # print_table(get_resized_ob(x_t2, cols, cell_size, reduce_pixel=True))
+            print(x_t2)
+            # x_t2 = np.concatenate(list(x_t2), axis=1)
             cv2.imwrite("stackframe" + str(i) + ".png", x_t2)
             h_state = game.heuristic_state()
             print(i, h_state)
@@ -1189,7 +1487,7 @@ if __name__ == '__main__':
         x_t1 = np.reshape(x_t1, (ob.shape[0], -1, 1))
         cv2.imwrite("frame" + ".png", x_t1)
 
-        for i in range(40):
+        for i in range(50):
             game.render()
             # action = game.action_space.sample()
             # action = 4
@@ -1198,6 +1496,7 @@ if __name__ == '__main__':
             ob1, reward1, done1 = game.step(action)
             h_state = game.heuristic_state()
             print(i, h_state, game.total_lines())
+            print("fit reward", game.fitness_reward)
             x_t2 = cv2.cvtColor(ob1, cv2.COLOR_BGR2GRAY)
             # ret, x_t2 = cv2.threshold(x_t2,1,255,cv2.THRESH_BINARY)
             # x_t2 = np.reshape(x_t2, (288, -1, 1))

@@ -130,15 +130,20 @@ def plot(episode, total_rewards, rewards, losses, cleared_lines, epsilons=None):
     plt.subplot(224)
     plt.title("loss")
     plt.xlabel("step")
-    plt.ylim(0, 0.1)
+    plt.ylim(0, 2)
     plt.plot(losses)    
     
     plt.pause(0.01)
 
 def get_torch_screen(np_screen):
+    """ Convert numpty screen to Tensor. """
     screen = torch.from_numpy(np_screen).float().to(device)
     return screen.unsqueeze(0)
 
+def store_data(path, data_title:str, data:list):
+    data = {data_title: data}
+    df = pd.DataFrame(data)
+    df.to_csv(path)
 
 def optimize_model():
     if len(memory) < BATCH_SIZE:
@@ -197,6 +202,16 @@ def train(env, board_size, num_episodes, check_point, render=False, train_ver=0,
     saving_path = './model_saving/' + today.strftime('%m%d%H%M') + '_' + str(board_size)
     model_dir = pathlib.Path(saving_path)
     model_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create new folder by date for data storage
+    path = "./results/" + today.strftime('%m%d%H%M') + '_' + str(board_size)
+    new_dir = pathlib.Path(path)
+    try: 
+        new_dir.mkdir(parents=True, exist_ok=True)  # if parent path is not existing, create it 
+    except FileExistsError as error: 
+        print(error)
+
+    cell_size = env.cell_size
     losses = []
     rewards = []
     each_reward = []
@@ -294,7 +309,11 @@ def train(env, board_size, num_episodes, check_point, render=False, train_ver=0,
         if i_episode % 20 == 0:
             print('Total steps: {} \t Episode: {}/{} \t Total reward: {} \t lines: {}'.format(steps_done, i_episode, t, total_reward, total_lines))
 
-        
+        if i_episode % 500 == 0:
+            store_data(new_dir/'rewards_v{}.csv'.format(train_ver), "rewards by ep", rewards)
+            store_data(new_dir/'loss_v{}.csv'.format(train_ver), "loss by step", rewards)
+            store_data(new_dir/'step_reward_v{}.csv'.format(train_ver), "reward by step", rewards)
+            store_data(new_dir/'lines_v{}.csv'.format(train_ver), "cleared lines by ep", rewards)
 
                 
         if i_episode in check_point:
@@ -392,19 +411,19 @@ if __name__ == '__main__':
         10: (216, 200)
     }
     # Train for Tetris
-    reward_ver = 11
+    reward_ver = 13
     # reward_ver = 10
     board_size = 8
     env = TetrisEnv()
-    env = CropObservation(env, screen_crop[board_size])  # 6x8: (150, 110) 10x12: (216, 200)
+    env = CropObservation(env, reduce_pixel=True, crop=True, board_width=board_size)  # 6x8: (150, 110) 10x12: (216, 200)
     env = HeuristicReward(env, ver=reward_ver)
-    env = TetrisPreprocessing(env, screen_size=84, frame_skip=0)
+    env = TetrisPreprocessing(env, frame_skip=0, grayscale_obs=True, grayscale_newaxis=False, scale_obs=False)
     env = FrameStack(env,4)
 
     plt.ion()
 
     BATCH_SIZE = 32
-    GAMMA = 0.999
+    GAMMA = 0.999  # 0.999
     EPS_START = 0.9
     EPS_END = 0.05
     EPS_DECAY = 200  # 1000000 originally
@@ -414,10 +433,13 @@ if __name__ == '__main__':
     
 
 
-    screen_shape = env.observation_space.shape[1:]
-    # print("screen shape", screen_shape)
+    # screen_shape = env.observation_space.shape[1:]
+    screen_shape = env.shape  # the board size
+    print("screen shape", screen_shape)
 
     # if gpu is to be used
+    if torch.cuda.is_available():
+        print("...GPU is using...")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Code and hyperparameter for CartPole
@@ -446,6 +468,12 @@ if __name__ == '__main__':
     target_net = DQN(n_actions, in_channels=in_channels, screen_shape=screen_shape).to(device)
     target_net.load_state_dict(policy_net.state_dict())
     target_net.eval()
+    
+    # # DQN with all MLP structure
+    # policy_net = DQN_MLP(n_actions, in_channels=in_channels, screen_shape=screen_shape).to(device)
+    # target_net = DQN_MLP(n_actions, in_channels=in_channels, screen_shape=screen_shape).to(device)
+    # target_net.load_state_dict(policy_net.state_dict())
+    # target_net.eval()
 
     optimizer = optim.RMSprop(policy_net.parameters())
     memory = ReplayBuffer(10000, screen_shape=screen_shape)
@@ -455,10 +483,10 @@ if __name__ == '__main__':
     # Training and testing
     plt.ion()
     plt.figure(figsize=(15, 10))
-    num_episodes = 800
-    check_point = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 
+    num_episodes = 3000
+    check_point = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1500, 2000, 2500,
             3000, 5000, 10000, 50000, 100000, 300000, 500000]
-    record_point = [100, 150, 250, 350, 450, 1000, 2000, num_episodes-50]
+    record_point = [100, 150, 250, 350, 450, 600, 1000, 2000, num_episodes-50]
     # record_point = [10, 20, 40]
     # record_point = None
     # Resume training
@@ -474,6 +502,6 @@ if __name__ == '__main__':
     # # restart env
     # train(env, board_size, num_episodes, check_point, render=True, train_ver=reward_ver,record_point=record_point)
     # torch.save(policy_net, "dqn_tetris_model")
-    # policy_net = torch.load("model_saving/08030254_8/DQN_800_v11.pth")
+    # policy_net = torch.load("model_saving/08071515_8/DQN_1000_v13.pth")
 
-    # test(env, 50, policy_net, render=True)
+    # test(env, 5, policy_net, render=True)
