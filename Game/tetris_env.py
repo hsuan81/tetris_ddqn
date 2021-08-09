@@ -66,7 +66,7 @@ tetris_shapes = [
     # [[0, 0, 5],
     #  [5, 5, 5]],
 
-    # [[6, 6, 6, 6]],
+    [[6, 6, 6, 6]],
 
     [[7, 7],
      [7, 7]]
@@ -1077,6 +1077,7 @@ class CropObservation(gym.ObservationWrapper):
         self.shape = self.observation_space.shape
         self.reduce_pixel = reduce_pixel
         self.cell_width = env.cell_size
+        # self.reduce_to = reduce_to
         self.board_width = board_width
         self.crop = crop
 
@@ -1085,8 +1086,10 @@ class CropObservation(gym.ObservationWrapper):
             height = self.shape[0]
             self.shape = (height, width, self.shape[2])
         if reduce_pixel:
-            width = self.shape[1] // self.cell_width
-            height = self.shape[0] // self.cell_width
+            # width = (self.shape[1] // self.cell_width) * self.reduce_to
+            # height = (self.shape[0]  // self.cell_width) * self.reduce_to
+            width = (self.shape[1] // self.cell_width)
+            height = (self.shape[0]  // self.cell_width)
             self.shape = (height, width, self.shape[2])
         # obs_shape = self.shape + self.observation_space.shape[2:]
         self.observation_space = spaces.Box(low=0, high=255, shape=self.shape, dtype=np.uint8)
@@ -1111,7 +1114,17 @@ class CropObservation(gym.ObservationWrapper):
             screen_width = len(ob[0])
             screen_height = len(ob)
             # print("reduce", screen_height, screen_width)
-            ob = observation[:screen_height:cell_width, :screen_width:cell_width]
+            ob = observation[:screen_height:cell_width, :screen_width:cell_width]  # reduce to one cell for one pixel
+            # new_ob = []
+            # for y, row in enumerate(ob):
+            #     new_r = []
+            #     for x in range(len(row)):
+            #         if x % cell_width == 0:
+            #             new_r.extend(row[x:x+reduce_to])
+            #             print("new", new_r)
+            #     new_ob.append(new_r)
+
+            # return np.array(new_ob)
             return ob
 
         
@@ -1390,8 +1403,8 @@ ACTION_LOOKUP = {
     0 : 'NONE',
     1 : 'LEFT',
     2 : 'RIGHT',
-    3 : 'DOWN',
-    # 4 : 'ROTATE', # Used on defense to slide tackle the ball
+    # 3 : 'DOWN',
+    3 : 'ROTATE', # Used on defense to slide tackle the ball
     # 5 : 'INSDROP',  # Used only by goalie to catch the ball
     # 6 : 'ROTATE+LEFT',
     # 7 : 'ROTATE+RIGHT',
@@ -1421,7 +1434,7 @@ if __name__ == '__main__':
     
     if FRAMESTACK:
         game = TetrisEnv()
-        game = CropObservation(game, reduce_pixel=True, crop=True, board_width=cols)
+        game = CropObservation(game, reduce_pixel=True, reduce_to=3, crop=True, board_width=cols)
         game = HeuristicReward(game, ver=13)
         game = TetrisPreprocessing(game, frame_skip=0, grayscale_obs=True, grayscale_newaxis=False, scale_obs=False)
         # game = FrameStack(game,4)

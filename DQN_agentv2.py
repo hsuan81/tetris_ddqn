@@ -16,6 +16,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import torchvision.transforms as T
+from torchsummary import summary
 
 from networks.models import *
 from Game.tetris_env import *
@@ -70,21 +71,49 @@ def get_cart_location(screen_width):
 #     # Resize, and add a batch dimension (BCHW)
 #     return resize(screen).unsqueeze(0)
 
-def select_action(state, n_actions):
-    global steps_done
-    sample = random.random()
-    eps_threshold = EPS_END + (EPS_START - EPS_END) * \
-        math.exp(-1. * steps_done / EPS_DECAY)
-    steps_done += 1
-    if sample > eps_threshold:
-        # return torch.tensor([[random.randrange(n_actions)]], device=device, dtype=torch.long)
-        with torch.no_grad():
-            # t.max(1) will return largest column value of each row.
-            # second column on max result is index of where max element was
-            # found, so we pick action with the larger expected reward.
-            return policy_net(state).max(1)[1].view(1, 1)
-    else:
-        return torch.tensor([[random.randrange(n_actions)]], device=device, dtype=torch.long)
+def select_action(observation, n_actions):
+        """
+        This function uses softmax action selection with continousily decreasing temperature. During training I have tried many variations of the temperature 
+        and found that a decreasing version of this is the best way to takle between exploration and exploitation.
+        Starting with higher temperature and decreasing the temperature so the probabilities will be sckewed to the highest probability.
+        """
+        global steps_done
+        steps_done += 1
+        state = observation
+        advantage = policy_net(state)
+        print("q val", advantage)
+        soft = nn.Softmax(dim=-1)
+        prob = soft(advantage).cpu().detach().numpy()[0]
+        # prob = prob.cpu().detach().numpy()[0]
+        action = np.random.choice(n_actions, p=prob)
+
+        
+        # if action == T.argmax(advantage).item():
+        #     greedy.append(0)
+        # else: 
+        #     greedy.append(1)
+
+        return torch.tensor([[action]])
+
+# def select_action(state, n_actions):
+#     global steps_done
+#     sample = random.random()
+#     eps_threshold = EPS_END + (EPS_START - EPS_END) * \
+#         math.exp(-1. * steps_done / EPS_DECAY)
+#     # print("step", steps_done)
+#     # print("eps threshold", eps_threshold)
+#     steps_done += 1
+#     if sample > eps_threshold:
+#         # return torch.tensor([[random.randrange(n_actions)]], device=device, dtype=torch.long)
+#         with torch.no_grad():
+#             # t.max(1) will return largest column value of each row.
+#             # second column on max result is index of where max element was
+#             # found, so we pick action with the larger expected reward.
+#             print("policy net", policy_net(state))
+#             # print("policy max", policy_net(state).max(1)[1].view(1, 1))
+#             return policy_net(state).max(1)[1].view(1, 1)
+#     else:
+#         return torch.tensor([[random.randrange(n_actions)]], device=device, dtype=torch.long)
 
 
 
@@ -130,7 +159,7 @@ def plot(episode, total_rewards, rewards, losses, cleared_lines, epsilons=None):
     plt.subplot(224)
     plt.title("loss")
     plt.xlabel("step")
-    plt.ylim(0, 2)
+    plt.ylim(0, 0.5)
     plt.plot(losses)    
     
     plt.pause(0.01)
@@ -186,6 +215,10 @@ def optimize_model():
     # Compute Huber loss
     criterion = nn.SmoothL1Loss()
     loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
+
+    # Check q value approaching mechanism
+    # print("sa v", state_action_values)
+    # print("expect sa v", expected_state_action_values)
     # print("loss", type(loss))
     # print(loss, loss.item())
 
@@ -249,10 +282,12 @@ def train(env, board_size, num_episodes, check_point, render=False, train_ver=0,
                 vid.close()
                 record = False
                 print("record ends:", i_episode)
-
+        # print("episode", i_episode)
         for t in count():
+            print("state", state[0][3])
             # Select and perform an action
             action = select_action(state, n_actions)
+            print("action", action)
             # action = env.sample()
             if render:
                 env.render()
@@ -324,7 +359,8 @@ def train(env, board_size, num_episodes, check_point, render=False, train_ver=0,
                         'target_state_dict': target_net.state_dict(),
                         'optimizer_state_dict': optimizer.state_dict(),
                         'loss': loss,
-                        # 'learning rate': lr,   # if it is Adam
+                        'learning rate': lr,   # if it is Adam
+                        'step': steps_done,
                         }, "%s/%s_%s_train_v%s.pth" % (saving_path, "DQN", i_episode, train_ver))   # save for later training
 
     print('Complete')
@@ -429,7 +465,7 @@ if __name__ == '__main__':
     EPS_DECAY = 200  # 1000000 originally
     TARGET_UPDATE = 200
     in_channels = 4  # due to frame stack
-    lr = 0.0001
+    lr = 0.001
     
 
 
@@ -475,7 +511,7 @@ if __name__ == '__main__':
     # target_net.load_state_dict(policy_net.state_dict())
     # target_net.eval()
 
-    optimizer = optim.RMSprop(policy_net.parameters())
+    optimizer = optim.RMSprop(policy_net.parameters(), lr=lr)
     memory = ReplayBuffer(10000, screen_shape=screen_shape)
 
     steps_done = 0
@@ -483,17 +519,25 @@ if __name__ == '__main__':
     # Training and testing
     plt.ion()
     plt.figure(figsize=(15, 10))
-    num_episodes = 3000
+    num_episodes = 2500
     check_point = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1500, 2000, 2500,
             3000, 5000, 10000, 50000, 100000, 300000, 500000]
     record_point = [100, 150, 250, 350, 450, 600, 1000, 2000, num_episodes-50]
     # record_point = [10, 20, 40]
     # record_point = None
     # Resume training
-    # ckpt = torch.load("model_saving/08021854_8/DQN_500_train_v11.pth")
-    # policy_net.load_state_dict(ckpt['model_state_dict'])
-    # target_net.load_state_dict(ckpt['target_state_dict'])
-    # optimizer.load_state_dict(ckpt['optimizer_state_dict'])
+    ckpt = torch.load("model_saving/08091814_8/DQN_2500_train_v13.pth")
+    policy_net.load_state_dict(ckpt['model_state_dict'])
+    target_net.load_state_dict(ckpt['target_state_dict'])
+    optimizer.load_state_dict(ckpt['optimizer_state_dict'])
+    lr = ckpt['learning rate']
+    print("lr", lr)
+    steps_done = ckpt['step']
+
+
+    # summary(policy_net, (4, 10, 8), batch_size=-1)
+    
+    
 
     start_episode = 0
     train(env, board_size, num_episodes, check_point, render=True, train_ver=reward_ver, record_point=record_point, start_episode=start_episode)
