@@ -32,7 +32,7 @@ import pygame, sys
 
 # The configuration
 cell_size = 18  # original: 18
-cols =      8  # standard game col is 10
+cols =      10  # standard game col is 10
 rows =      10  # standard game row is 22
 maxfps =    300
 
@@ -68,8 +68,8 @@ tetris_shapes = [
 
     [[6, 6, 6, 6]],
 
-    [[7, 7],
-     [7, 7]]
+    # [[7, 7],
+    #  [7, 7]]
 ]
 
 def rotate_clockwise(shape):
@@ -371,8 +371,20 @@ class TetrisApp(object):
         self.filled = filled
         return filled
 
-    def landing_height(self):
-        pass
+    def edge_reward(self):
+        value = 0
+        # row_weight = [0] * (len(self.board) - 4) + [1, 1, 2, 2]  # simple version
+        row_weight = [0.0, 0.0] + [0.5 ** x for x in range(self.board_height-2, 0, -1)]
+        for cy, row in enumerate(self.stone):
+            w = row_weight[cy + self.stone_y]
+            c = sum(x > 0 for x in row)
+            if row[0] > 0:
+                value += 0.2
+            if row[-1] > 0:
+                value += 0.2
+            value += w * c
+            # print("row value", value)
+        return value
 
     def falling_reward(self):
         value = 0

@@ -449,7 +449,7 @@ if __name__ == '__main__':
     # Train for Tetris
     reward_ver = 13
     # reward_ver = 10
-    board_size = 8
+    board_size = 10
     env = TetrisEnv()
     env = CropObservation(env, reduce_pixel=True, crop=True, board_width=board_size)  # 6x8: (150, 110) 10x12: (216, 200)
     env = HeuristicReward(env, ver=reward_ver)
@@ -519,7 +519,7 @@ if __name__ == '__main__':
     # Training and testing
     plt.ion()
     plt.figure(figsize=(15, 10))
-    num_episodes = 2500
+    num_episodes = 3000
     check_point = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1500, 2000, 2500,
             3000, 5000, 10000, 50000, 100000, 300000, 500000]
     record_point = [100, 150, 250, 350, 450, 600, 1000, 2000, num_episodes-50]
