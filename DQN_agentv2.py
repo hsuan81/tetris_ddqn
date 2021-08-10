@@ -81,7 +81,7 @@ def select_action(observation, n_actions):
         steps_done += 1
         state = observation
         advantage = policy_net(state)
-        print("q val", advantage)
+        # print("q val", advantage)
         soft = nn.Softmax(dim=-1)
         prob = soft(advantage).cpu().detach().numpy()[0]
         # prob = prob.cpu().detach().numpy()[0]
@@ -284,10 +284,10 @@ def train(env, board_size, num_episodes, check_point, render=False, train_ver=0,
                 print("record ends:", i_episode)
         # print("episode", i_episode)
         for t in count():
-            print("state", state[0][3])
+            # print("state", state[0][3])
             # Select and perform an action
             action = select_action(state, n_actions)
-            print("action", action)
+            # print("action", action)
             # action = env.sample()
             if render:
                 env.render()
@@ -526,13 +526,13 @@ if __name__ == '__main__':
     # record_point = [10, 20, 40]
     # record_point = None
     # Resume training
-    ckpt = torch.load("model_saving/08091814_8/DQN_2500_train_v13.pth")
-    policy_net.load_state_dict(ckpt['model_state_dict'])
-    target_net.load_state_dict(ckpt['target_state_dict'])
-    optimizer.load_state_dict(ckpt['optimizer_state_dict'])
-    lr = ckpt['learning rate']
-    print("lr", lr)
-    steps_done = ckpt['step']
+    # ckpt = torch.load("model_saving/08091814_8/DQN_2500_train_v13.pth")
+    # policy_net.load_state_dict(ckpt['model_state_dict'])
+    # target_net.load_state_dict(ckpt['target_state_dict'])
+    # optimizer.load_state_dict(ckpt['optimizer_state_dict'])
+    # lr = ckpt['learning rate']
+    # print("lr", lr)
+    # steps_done = ckpt['step']
 
 
     # summary(policy_net, (4, 10, 8), batch_size=-1)
