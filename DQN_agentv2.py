@@ -329,7 +329,7 @@ def train(env, board_size, num_episodes, check_point, render=False, train_ver=0,
             # Put loss into separate list 
             losses.append(loss)
 
-            if done or t == MAX_STEP:
+            if done or total_lines > 100:
                 episode_durations.append(t + 1)
                 rewards.append(total_reward)
                 cleared_lines.append(total_lines)
