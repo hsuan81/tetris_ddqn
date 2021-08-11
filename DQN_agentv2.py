@@ -413,7 +413,7 @@ def train(env, board_size, num_episodes, check_point, render=False, train_ver=0,
     # Average cleared lines of last 100 games, if over some benchmark, save the model for testing
     last_100 = cleared_lines[-100:]
     avg_100 = sum(last_100) // len(last_100)
-    if avg_100 > 0:
+    if avg_100 > 50:
         try:
             file_name = saving_path + "{}/{}_{}_v{}.pth".format(saving_path, "DQN_avg100", avg_100, train_ver)
             torch.save(policy_net, file_name)
