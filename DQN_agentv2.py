@@ -507,6 +507,8 @@ if __name__ == '__main__':
     # if gpu is to be used
     if torch.cuda.is_available():
         print("...GPU is using...")
+        BATCH_SIZE = 128
+        print("batch size", BATCH_SIZE)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Code and hyperparameter for CartPole
