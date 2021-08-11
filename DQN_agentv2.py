@@ -497,6 +497,7 @@ if __name__ == '__main__':
     MAX_STEP = 10000
     in_channels = 1  # due to frame stack
     lr = 0.001
+    render = True
     
 
 
@@ -508,7 +509,9 @@ if __name__ == '__main__':
     if torch.cuda.is_available():
         print("...GPU is using...")
         BATCH_SIZE = 128
+        render = False
         print("batch size", BATCH_SIZE)
+        print("render", render)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Code and hyperparameter for CartPole
@@ -573,7 +576,7 @@ if __name__ == '__main__':
     
 
     start_episode = 0
-    train(env, board_size, num_episodes, check_point, render=True, train_ver=reward_ver, record_point=record_point, start_episode=start_episode)
+    train(env, board_size, num_episodes, check_point, render=render, train_ver=reward_ver, record_point=record_point, start_episode=start_episode)
     
     # reward_ver = 10
     # # restart env
@@ -581,4 +584,4 @@ if __name__ == '__main__':
     # torch.save(policy_net, "dqn_tetris_model")
     # policy_net = torch.load("model_saving/08071515_8/DQN_1000_v13.pth")
 
-    # test(env, 5, policy_net, render=True)
+    # test(env, 5, policy_net, render=render)
