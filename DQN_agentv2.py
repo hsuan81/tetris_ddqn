@@ -468,7 +468,7 @@ if __name__ == '__main__':
     EPS_END = 0.05
     EPS_DECAY = 200  # 1000000 originally
     TARGET_UPDATE = 200
-    MAX_STEP = 20000
+    MAX_STEP = 10000
     in_channels = 1  # due to frame stack
     lr = 0.001
     
