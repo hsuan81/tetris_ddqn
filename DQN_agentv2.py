@@ -409,7 +409,7 @@ def train(env, board_size, num_episodes, check_point, render=False, train_ver=0,
     plt.ioff()
     # plt.show(block=True)
 
-def test(env, n_episodes, policy_net, render=False):
+def test(env, n_episodes, policy_net, render=False, console=True):
     for episode in range(n_episodes):
         state = get_torch_screen(env.reset())
         cl_lines = 0
@@ -420,6 +420,12 @@ def test(env, n_episodes, policy_net, render=False):
             if render:
                 env.render()
                 time.sleep(0.02)
+
+            if console:
+                print("episode %s step %s" %(episode, t))
+                print("state", state[0][3])
+                print("q value", q_vals)
+                print("action", action.item())
 
             next_state, reward, done = env.step(action.item())
             next_state = get_torch_screen(next_state)
