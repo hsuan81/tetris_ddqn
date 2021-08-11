@@ -381,6 +381,18 @@ def train(env, board_size, num_episodes, check_point, render=False, train_ver=0,
                             'step': steps_done,
                             'best clear lines': best_clear_lines,
                             }, "%s/best_%s_%s_train_v%s.pth" % (saving_path, "DQN", start_episode+i_episode, train_ver))   # save for later training
+            else:
+                torch.save({
+                            'episode': start_episode+i_episode,
+                            'model_state_dict': policy_net.state_dict(),
+                            'target_state_dict': target_net.state_dict(),
+                            'optimizer_state_dict': optimizer.state_dict(),
+                            'loss': loss,
+                            'learning rate': lr,   # if it is Adam
+                            'step': steps_done,
+                            'best clear lines': best_clear_lines,
+                            }, "%s/%s_%s_train_v%s.pth" % (saving_path, "DQN", start_episode+i_episode, train_ver))   # save for later training
+
 
     print('Complete')
     
@@ -546,37 +558,44 @@ if __name__ == '__main__':
     # target_net = DQN_MLP(n_actions, in_channels=in_channels, screen_shape=screen_shape).to(device)
     # target_net.load_state_dict(policy_net.state_dict())
     # target_net.eval()
-
+  
     optimizer = optim.RMSprop(policy_net.parameters(), lr=lr)
     memory = ReplayBuffer(10000, screen_shape=screen_shape)
-
+    resume = False
+    start_episode = 0
     steps_done = 0
 
     # Training and testing
     plt.ion()
     plt.figure(figsize=(15, 10))
-    num_episodes = 5000
+    num_episodes = 7000
     check_point = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1500, 2000, 2500,
             3000, 5000, 10000, 30000, 50000, 100000, 300000, 500000]
     record_point = [100, 150, 250, 350, 450, 600, 1000, 2000, 3500, num_episodes-50]
     # record_point = [10, 20, 40]
     # record_point = None
     # Resume training
-    # ckpt = torch.load("model_saving/08091814_8/DQN_2500_train_v13.pth")
-    # policy_net.load_state_dict(ckpt['model_state_dict'])
-    # target_net.load_state_dict(ckpt['target_state_dict'])
-    # optimizer.load_state_dict(ckpt['optimizer_state_dict'])
-    # lr = ckpt['learning rate']
-    # print("lr", lr)
-    # steps_done = ckpt['step']
+    resume = True
+    ckpt = torch.load("model_saving/08110825_8/best_DQN_3000_train_v13.pth")
+    policy_net.load_state_dict(ckpt['model_state_dict'])
+    target_net.load_state_dict(ckpt['target_state_dict'])
+    optimizer.load_state_dict(ckpt['optimizer_state_dict'])
+    lr = ckpt['learning rate']
+    print("lr", lr)
+    steps_done = ckpt['step']
+    start_episode = 3000
+    
+    # Check the loading of learning rate
+    for param_group in optimizer.param_groups:
+        print("loaded lr", param_group['lr'])
 
 
     # summary(policy_net, (4, 10, 8), batch_size=-1)
     
     
 
-    start_episode = 0
-    train(env, board_size, num_episodes, check_point, render=render, train_ver=reward_ver, record_point=record_point, start_episode=start_episode)
+    
+    train(env, board_size, num_episodes, check_point, render=render, train_ver=reward_ver, record_point=record_point, start_episode=start_episode, resume_train=resume)
     
     # reward_ver = 10
     # # restart env
