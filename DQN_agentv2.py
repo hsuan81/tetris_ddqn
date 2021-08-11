@@ -159,7 +159,7 @@ def plot(episode, total_rewards, rewards, losses, cleared_lines, epsilons=None):
     plt.subplot(224)
     plt.title("loss")
     plt.xlabel("step")
-    plt.ylim(0, 0.5)
+    plt.ylim(0, 1)
     plt.plot(losses)    
     
     plt.pause(0.01)
@@ -230,14 +230,20 @@ def optimize_model():
     optimizer.step()
     return loss.item()
 
-def train(env, board_size, num_episodes, check_point, render=False, train_ver=0, record_point=None, start_episode=0):
+def train(env, board_size, num_episodes, check_point, render=False, train_ver=0, record_point=None, start_episode=0, resume_train=False):
     today = datetime.now()
-    saving_path = './model_saving/' + today.strftime('%m%d%H%M') + '_' + str(board_size)
+    if not resume_train:
+        saving_path = './model_saving/' + today.strftime('%m%d%H%M') + '_' + str(board_size)
+    else:
+        saving_path = './model_saving/' + today.strftime('%m%d%H%M') + '_resume' + str(board_size)
     model_dir = pathlib.Path(saving_path)
     model_dir.mkdir(parents=True, exist_ok=True)
 
     # Create new folder by date for data storage
-    path = "./results/" + today.strftime('%m%d%H%M') + '_' + str(board_size)
+    if not resume_train:
+        path = "./results/" + today.strftime('%m%d%H%M') + '_' + str(board_size)
+    else:
+        path = "./results/" + today.strftime('%m%d%H%M') + '_resume' + str(board_size)
     new_dir = pathlib.Path(path)
     try: 
         new_dir.mkdir(parents=True, exist_ok=True)  # if parent path is not existing, create it 
@@ -245,6 +251,7 @@ def train(env, board_size, num_episodes, check_point, render=False, train_ver=0,
         print(error)
 
     cell_size = env.cell_size
+    best_clear_lines = 0  # critetrion to store the best model 
     losses = []
     rewards = []
     each_reward = []
@@ -252,14 +259,17 @@ def train(env, board_size, num_episodes, check_point, render=False, train_ver=0,
     episode_durations = []
     if record_point is not None:
         from gym.wrappers.monitoring import video_recorder
-        video_path = "./recording/" + today.strftime('%m%d%H%M') + '_' + str(board_size)
+        if not resume_train:
+            video_path = "./recording/" + today.strftime('%m%d%H%M') + '_' + str(board_size)
+        else:
+            video_path = "./recording/" + today.strftime('%m%d%H%M') + '_resume' + str(board_size)
         video_dir = pathlib.Path(video_path)
         try: 
             video_dir.mkdir(parents=True, exist_ok=True)  # if parent path is not existing, create it 
         except FileExistsError as error: 
             print(error)
         
-    for i_episode in range(start_episode+1, num_episodes+1):
+    for i_episode in range(1, num_episodes+1):
         # print("i_ep", i_episode)
         # Initialize the environment and state
         state = get_torch_screen(env.reset())
@@ -271,17 +281,17 @@ def train(env, board_size, num_episodes, check_point, render=False, train_ver=0,
         if record_point is not None:
             # from gym.wrappers.monitoring import video_recorder
             if i_episode in record_point:
-                vid = video_recorder.VideoRecorder(env, path=video_path + "/vid_v%s_%s.mp4" %(train_ver, i_episode))
+                vid = video_recorder.VideoRecorder(env, path=video_path + "/vid_v%s_%s.mp4" %(train_ver, start_episode+i_episode))
                 record = True
                 re= 0
-                print("record start:", i_episode)
+                print("record start:", start_episode+i_episode)
             elif record and re < 40:
                 re += 1
             elif record and re == 40:
                 vid.enabled = False
                 vid.close()
                 record = False
-                print("record ends:", i_episode)
+                print("record ends:", start_episode+i_episode)
         # print("episode", i_episode)
         for t in count():
             if state.dim() == 3:
@@ -341,31 +351,36 @@ def train(env, board_size, num_episodes, check_point, render=False, train_ver=0,
             
 
             
-        # Update the target network, copying all weights and biases in DQN
+        # Update the target network, copying all weights and biases in DQN 
+        # modified from https://github.com/jmichaux/dqn-pytorch/blob/master/main.py
         if i_episode % TARGET_UPDATE == 0:
             target_net.load_state_dict(policy_net.state_dict())
 
         if i_episode % 20 == 0:
-            print('Total steps: {} \t Episode: {}/{} \t Total reward: {} \t lines: {}'.format(steps_done, i_episode, t, total_reward, total_lines))
+            print('Total steps: {} \t Episode: {}/{} \t Total reward: {} \t lines: {}'.format(steps_done, start_episode+i_episode, t, total_reward, total_lines))
 
         if i_episode % 100 == 0:
             store_data(new_dir/'rewards_v{}.csv'.format(train_ver), "rewards by ep", rewards)
-            store_data(new_dir/'loss_v{}.csv'.format(train_ver), "loss by step", rewards)
-            store_data(new_dir/'step_reward_v{}.csv'.format(train_ver), "reward by step", rewards)
-            store_data(new_dir/'lines_v{}.csv'.format(train_ver), "cleared lines by ep", rewards)
+            store_data(new_dir/'loss_v{}.csv'.format(train_ver), "loss by step", losses)
+            store_data(new_dir/'step_reward_v{}.csv'.format(train_ver), "reward by step", each_reward)
+            store_data(new_dir/'lines_v{}.csv'.format(train_ver), "cleared lines by ep", cleared_lines)
 
                 
         if i_episode in check_point:
-            torch.save(policy_net, "%s/%s_%s_v%s.pth" % (saving_path, "DQN", i_episode, train_ver))
-            torch.save({
-                        'episode': i_episode,
-                        'model_state_dict': policy_net.state_dict(),
-                        'target_state_dict': target_net.state_dict(),
-                        'optimizer_state_dict': optimizer.state_dict(),
-                        'loss': loss,
-                        'learning rate': lr,   # if it is Adam
-                        'step': steps_done,
-                        }, "%s/%s_%s_train_v%s.pth" % (saving_path, "DQN", i_episode, train_ver))   # save for later training
+            torch.save(policy_net, "%s/%s_%s_v%s.pth" % (saving_path, "DQN", start_episode+i_episode, train_ver))
+            is_best = True if total_lines > best_clear_lines else False
+            if is_best:
+                best_clear_lines = total_lines
+                torch.save({
+                            'episode': start_episode+i_episode,
+                            'model_state_dict': policy_net.state_dict(),
+                            'target_state_dict': target_net.state_dict(),
+                            'optimizer_state_dict': optimizer.state_dict(),
+                            'loss': loss,
+                            'learning rate': lr,   # if it is Adam
+                            'step': steps_done,
+                            'best clear lines': best_clear_lines,
+                            }, "%s/best_%s_%s_train_v%s.pth" % (saving_path, "DQN", start_episode+i_episode, train_ver))   # save for later training
 
     print('Complete')
     
@@ -412,10 +427,13 @@ def train(env, board_size, num_episodes, check_point, render=False, train_ver=0,
 def test(env, n_episodes, policy_net, render=False, console=True):
     for episode in range(n_episodes):
         state = get_torch_screen(env.reset())
+        if state.dim() == 3:
+                state = state.unsqueeze(0)
         cl_lines = 0
         total_reward = 0.0
         for t in count():
-            action = policy_net(state).max(1)[1].view(1,1)
+            q_vals = policy_net(state)
+            action = q_vals.max(1)[1].view(1,1)
 
             if render:
                 env.render()
@@ -423,12 +441,14 @@ def test(env, n_episodes, policy_net, render=False, console=True):
 
             if console:
                 print("episode %s step %s" %(episode, t))
-                print("state", state[0][3])
+                print("state", state[0][-1])
                 print("q value", q_vals)
                 print("action", action.item())
 
             next_state, reward, done = env.step(action.item())
             next_state = get_torch_screen(next_state)
+            if next_state.dim() == 3:
+                next_state = next_state.unsqueeze(0)
             h_state = env.heuristic_state()
             cl_lines += h_state[0]
 
@@ -532,7 +552,7 @@ if __name__ == '__main__':
     plt.figure(figsize=(15, 10))
     num_episodes = 5000
     check_point = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1500, 2000, 2500,
-            3000, 5000, 10000, 50000, 100000, 300000, 500000]
+            3000, 5000, 10000, 30000, 50000, 100000, 300000, 500000]
     record_point = [100, 150, 250, 350, 450, 600, 1000, 2000, 3500, num_episodes-50]
     # record_point = [10, 20, 40]
     # record_point = None
