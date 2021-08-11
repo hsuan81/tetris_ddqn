@@ -93,7 +93,7 @@ def select_action(observation, n_actions):
         # else: 
         #     greedy.append(1)
 
-        return torch.tensor([[action]])
+        return torch.tensor([[action]], device=device)
 
 # def select_action(state, n_actions):
 #     global steps_done
@@ -284,6 +284,8 @@ def train(env, board_size, num_episodes, check_point, render=False, train_ver=0,
                 print("record ends:", i_episode)
         # print("episode", i_episode)
         for t in count():
+            if state.dim() == 3:
+                state = state.unsqueeze(0)
             # print("state", state[0][3])
             # Select and perform an action
             action = select_action(state, n_actions)
@@ -298,6 +300,8 @@ def train(env, board_size, num_episodes, check_point, render=False, train_ver=0,
 
             next_state, reward, done = env.step(action.item())
             next_state = get_torch_screen(next_state)
+            if next_state.dim() == 3:
+                next_state = next_state.unsqueeze(0)
             # Obtain the heuristic state for this step
             h_state = env.heuristic_state()
             total_lines = env.total_lines()
@@ -325,7 +329,7 @@ def train(env, board_size, num_episodes, check_point, render=False, train_ver=0,
             # Put loss into separate list 
             losses.append(loss)
 
-            if done:
+            if done or t == MAX_STEP:
                 episode_durations.append(t + 1)
                 rewards.append(total_reward)
                 cleared_lines.append(total_lines)
@@ -449,12 +453,12 @@ if __name__ == '__main__':
     # Train for Tetris
     reward_ver = 13
     # reward_ver = 10
-    board_size = 10
+    board_size = 8
     env = TetrisEnv()
     env = CropObservation(env, reduce_pixel=True, crop=True, board_width=board_size)  # 6x8: (150, 110) 10x12: (216, 200)
     env = HeuristicReward(env, ver=reward_ver)
     env = TetrisPreprocessing(env, frame_skip=0, grayscale_obs=True, grayscale_newaxis=False, scale_obs=False)
-    env = FrameStack(env,4)
+    # env = FrameStack(env,4)
 
     plt.ion()
 
@@ -464,7 +468,8 @@ if __name__ == '__main__':
     EPS_END = 0.05
     EPS_DECAY = 200  # 1000000 originally
     TARGET_UPDATE = 200
-    in_channels = 4  # due to frame stack
+    MAX_STEP = 20000
+    in_channels = 1  # due to frame stack
     lr = 0.001
     
 
@@ -519,10 +524,10 @@ if __name__ == '__main__':
     # Training and testing
     plt.ion()
     plt.figure(figsize=(15, 10))
-    num_episodes = 3000
+    num_episodes = 5000
     check_point = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1500, 2000, 2500,
             3000, 5000, 10000, 50000, 100000, 300000, 500000]
-    record_point = [100, 150, 250, 350, 450, 600, 1000, 2000, num_episodes-50]
+    record_point = [100, 150, 250, 350, 450, 600, 1000, 2000, 3500, num_episodes-50]
     # record_point = [10, 20, 40]
     # record_point = None
     # Resume training

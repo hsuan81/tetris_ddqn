@@ -32,7 +32,7 @@ import pygame, sys
 
 # The configuration
 cell_size = 18  # original: 18
-cols =      10  # standard game col is 10
+cols =      8  # standard game col is 10
 rows =      10  # standard game row is 22
 maxfps =    300
 
@@ -207,9 +207,9 @@ class TetrisApp(object):
 
     def add_cl_lines(self, n):
         """ Compute cleared line, score and level, and adjust the dropping spped as level goes up. """
-        # linescores = [0, 40, 100, 300, 1200]  # Nintendo scoring system
+        linescores = [0, 40, 100, 300, 1200]  # Nintendo scoring system
         # linescores = [0, 10, 40, 90, 160]
-        linescores = [0, 0, 0, 0, 0]
+        # linescores = [0, 0, 0, 0, 0]
         self.cl_lines = n
         # print("cleared line", self.cl_lines)
         self.lines += n
@@ -996,7 +996,7 @@ class HeuristicReward(gym.RewardWrapper):
         return ob, self.reward(reward, fit_rew, done), done
     
     def reward(self, reward, fit_reward, done):
-        done_r = 0 if not done else 0
+        done_r = 0 if not done else -1
         rew = reward + fit_reward + done_r
         return rew
 
@@ -1446,7 +1446,7 @@ if __name__ == '__main__':
     
     if FRAMESTACK:
         game = TetrisEnv()
-        game = CropObservation(game, reduce_pixel=True, reduce_to=3, crop=True, board_width=cols)
+        game = CropObservation(game, reduce_pixel=True, crop=True, board_width=cols)
         game = HeuristicReward(game, ver=13)
         game = TetrisPreprocessing(game, frame_skip=0, grayscale_obs=True, grayscale_newaxis=False, scale_obs=False)
         # game = FrameStack(game,4)
