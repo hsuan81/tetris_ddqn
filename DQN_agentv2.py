@@ -348,7 +348,7 @@ def train(env, board_size, num_episodes, check_point, render=False, train_ver=0,
         if i_episode % 20 == 0:
             print('Total steps: {} \t Episode: {}/{} \t Total reward: {} \t lines: {}'.format(steps_done, i_episode, t, total_reward, total_lines))
 
-        if i_episode % 500 == 0:
+        if i_episode % 100 == 0:
             store_data(new_dir/'rewards_v{}.csv'.format(train_ver), "rewards by ep", rewards)
             store_data(new_dir/'loss_v{}.csv'.format(train_ver), "loss by step", rewards)
             store_data(new_dir/'step_reward_v{}.csv'.format(train_ver), "reward by step", rewards)
