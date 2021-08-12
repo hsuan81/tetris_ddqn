@@ -270,7 +270,7 @@ def train(env, board_size, num_episodes, check_point, render=False, train_ver=0,
             print(error)
 
     if not render:
-        plotter = VisdomLinePlotter()
+        plotter = VisdomLinePlotter(today.strftime('%m%d%H%M'))
         
     for i_episode in range(1, num_episodes+1):
         # print("i_ep", i_episode)
