@@ -343,7 +343,7 @@ def train(env, board_size, num_episodes, check_point, render=False, train_ver=0,
             losses.append(loss)
 
             if not render:
-                plotter.plot("reward", "train", "reward per step", "step", t, reward)
+                plotter.plot("reward", "train", "reward per step", "step", t, reward.item())
                 plotter.plot("loss", "train", "loss per step", "step", t, loss)
 
             if done or total_lines > 100:
