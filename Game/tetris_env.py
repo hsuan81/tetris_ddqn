@@ -386,6 +386,20 @@ class TetrisApp(object):
             # print("row value", value)
         return value
 
+    def enhanced_falling_reward(self):
+        value = 0
+        # row_weight = [0] * (len(self.board) - 4) + [1, 1, 2, 2]  # simple version
+        row_weight = [0.0, 0.0] + [0.5 ** x for x in range(self.board_height-2, 0, -1)]
+        for cy, row in enumerate(self.stone):
+            w = row_weight[cy + self.stone_y]
+            c = sum(x > 0 for x in row)
+            # if the agent fills the rest of cells in one row, the weight increases.
+            if self.board[cy].count(0) < self.board_width // 2:
+                w *= 2
+            value += w * c
+            # print("row value", value)
+        return value
+
     def falling_reward(self):
         value = 0
         # row_weight = [0] * (len(self.board) - 4) + [1, 1, 2, 2]  # simple version
@@ -669,6 +683,9 @@ class TetrisApp(object):
             falling_val = self.falling_reward()
             new_fit = falling_val
 
+        elif ver == 14:
+            enhanced_falling_val = self.enhanced_falling_reward()
+            new_fit = enhanced_falling_val
 
         # rew = new_fit - self.fitness_val
         rew = new_fit

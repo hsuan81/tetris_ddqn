@@ -268,6 +268,9 @@ def train(env, board_size, num_episodes, check_point, render=False, train_ver=0,
             video_dir.mkdir(parents=True, exist_ok=True)  # if parent path is not existing, create it 
         except FileExistsError as error: 
             print(error)
+
+    if not render:
+        plotter = VisdomLinePlotter()
         
     for i_episode in range(1, num_episodes+1):
         # print("i_ep", i_episode)
@@ -339,6 +342,10 @@ def train(env, board_size, num_episodes, check_point, render=False, train_ver=0,
             # Put loss into separate list 
             losses.append(loss)
 
+            if not render:
+                plotter.plot("reward", "train", "reward per step", "step", t, reward)
+                plotter.plot("loss", "train", "loss per step", "step", t, loss)
+
             if done or total_lines > 100:
                 episode_durations.append(t + 1)
                 rewards.append(total_reward)
@@ -346,6 +353,9 @@ def train(env, board_size, num_episodes, check_point, render=False, train_ver=0,
                 # print("train total", cl_lines)
                 # plot_durations()
                 plot(i_episode, rewards, each_reward, losses, cleared_lines, epsilons=None)
+                if not render:
+                    plotter.plot("rewards", "train", "rewards per ep", "episode", i_episode, total_reward)
+                    plotter.plot("cleared lines", "train", "cleared lines per ep", "episode", i_episode, total_lines)
                 break
             
             
@@ -489,7 +499,7 @@ if __name__ == '__main__':
         10: (216, 200)
     }
     # Train for Tetris
-    reward_ver = 13
+    reward_ver = 14
     # reward_ver = 10
     board_size = 8
     env = TetrisEnv()
@@ -568,22 +578,22 @@ if __name__ == '__main__':
     # Training and testing
     plt.ion()
     plt.figure(figsize=(15, 10))
-    num_episodes = 7000
+    num_episodes = 1000
     check_point = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1500, 2000, 2500,
             3000, 5000, 10000, 30000, 50000, 100000, 300000, 500000]
     record_point = [100, 150, 250, 350, 450, 600, 1000, 2000, 3500, num_episodes-50]
     # record_point = [10, 20, 40]
     # record_point = None
     # Resume training
-    resume = True
-    ckpt = torch.load("model_saving/08110825_8/best_DQN_3000_train_v13.pth")
-    policy_net.load_state_dict(ckpt['model_state_dict'])
-    target_net.load_state_dict(ckpt['target_state_dict'])
-    optimizer.load_state_dict(ckpt['optimizer_state_dict'])
-    lr = ckpt['learning rate']
-    print("lr", lr)
-    steps_done = ckpt['step']
-    start_episode = 3000
+    # resume = True
+    # ckpt = torch.load("model_saving/08110825_8/best_DQN_3000_train_v13.pth")
+    # policy_net.load_state_dict(ckpt['model_state_dict'])
+    # target_net.load_state_dict(ckpt['target_state_dict'])
+    # optimizer.load_state_dict(ckpt['optimizer_state_dict'])
+    # lr = ckpt['learning rate']
+    # print("lr", lr)
+    # steps_done = ckpt['step']
+    # start_episode = 1000
     
     # Check the loading of learning rate
     for param_group in optimizer.param_groups:
