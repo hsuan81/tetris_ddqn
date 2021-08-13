@@ -378,6 +378,7 @@ def train(env, board_size, num_episodes, check_point, num_piece='all piece', ren
                 if not render:
                     plotter.plot("rewards", "train", "rewards per ep", "episode", i_episode, total_reward)
                     plotter.plot("cleared lines", "train", "cleared lines per ep", "episode", i_episode, total_lines)
+                    plotter.plot("loss", "train", "loss per episode", "episode", i_episode, loss)
                 break
             
             
