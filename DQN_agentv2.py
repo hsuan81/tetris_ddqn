@@ -537,7 +537,7 @@ if __name__ == '__main__':
     plt.ion()
 
     BATCH_SIZE = 32
-    GAMMA = 0.5  # 0.999
+    GAMMA = 0.999  # 0.999
     EPS_START = 0.9
     EPS_END = 0.05
     EPS_DECAY = 200  # 1000000 originally

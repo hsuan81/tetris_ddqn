@@ -208,7 +208,7 @@ class TetrisApp(object):
     def add_cl_lines(self, n):
         """ Compute cleared line, score and level, and adjust the dropping spped as level goes up. """
         # linescores = [0, 40, 100, 300, 1200]  # Nintendo scoring system
-        linescores = [0, 2, 4, 6, 8]
+        linescores = [0, 5, 10, 15, 20]
         # linescores = [0, 0, 0, 0, 0]
         self.cl_lines = n
         # print("cleared line", self.cl_lines)
