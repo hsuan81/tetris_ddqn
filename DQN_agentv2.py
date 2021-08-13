@@ -231,7 +231,7 @@ def optimize_model():
     optimizer.step()
     return loss.item()
 
-def train(env, board_size, num_episodes, check_point, render=False, train_ver=0, record_point=None, start_episode=0, resume_train=False):
+def train(env, board_size, num_episodes, check_point, num_piece='all piece', render=False, train_ver=0, record_point=None, start_episode=0, resume_train=False):
     today = datetime.now()
     if not resume_train:
         saving_path = './model_saving/' + today.strftime('%m%d%H%M') + '_' + str(board_size)
@@ -251,6 +251,15 @@ def train(env, board_size, num_episodes, check_point, render=False, train_ver=0,
     except FileExistsError as error: 
         print(error)
 
+    para = ['board size: {}'.format(board_size), 
+            'num of eps: {}'.format(num_episodes),
+            'num of piece: {}'.format(num_piece), 
+            'train ver: {}'.format(train_ver),
+            'start episode: {}'.format(start_episode),
+            'resume train: {}'.format(resume_train)]
+    with open(path + '/parameter.txt', 'w') as f:
+        f.writelines('\n'.join(para))
+
     cell_size = env.cell_size
     best_clear_lines = 0  # critetrion to store the best model 
     losses = []
@@ -258,6 +267,7 @@ def train(env, board_size, num_episodes, check_point, render=False, train_ver=0,
     each_reward = []
     cleared_lines = []
     episode_durations = []
+    _temp_memory = []
     if record_point is not None:
         from gym.wrappers.monitoring import video_recorder
         if not resume_train:
@@ -512,6 +522,10 @@ if __name__ == '__main__':
     reward_ver = 13
     # reward_ver = 10
     board_size = 8
+    piece_set = {0: 'all piece',
+                 1: 'one piece',
+                 2: 'two pieces'}
+    piece_code = 0
     env = TetrisEnv()
     env = CropObservation(env, reduce_pixel=True, crop=True, board_width=board_size)  # 6x8: (150, 110) 10x12: (216, 200)
     env = HeuristicReward(env, ver=reward_ver)
@@ -591,11 +605,11 @@ if __name__ == '__main__':
     check_point = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1500, 2000, 2500,
             3000, 5000, 10000, 30000, 50000, 100000, 300000, 500000]
     record_point = [100, 150, 250, 350, 450, 600, 1000, 2000, 3500, num_episodes-50]
-    # record_point = [10, 20, 40]
-    # record_point = None
-    # Resume training
+    
+    # Resume training setting
     # resume = True
-    # ckpt = torch.load("model_saving/08110825_8/best_DQN_3000_train_v13.pth")
+    # saved_model = "model_saving/08110825_8/best_DQN_3000_train_v13.pth"
+    # ckpt = torch.load(saved_model)
     # policy_net.load_state_dict(ckpt['model_state_dict'])
     # target_net.load_state_dict(ckpt['target_state_dict'])
     # optimizer.load_state_dict(ckpt['optimizer_state_dict'])
@@ -614,7 +628,9 @@ if __name__ == '__main__':
     
 
     
-    train(env, board_size, num_episodes, check_point, render=render, train_ver=reward_ver, record_point=record_point, start_episode=start_episode, resume_train=resume)
+    train(env, board_size, num_episodes, check_point, num_piece=piece_set[piece_code], render=render, train_ver=reward_ver, record_point=record_point, start_episode=start_episode, resume_train=resume)
+    
+
     
     # reward_ver = 10
     # # restart env
