@@ -212,6 +212,8 @@ def optimize_model():
     next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0].detach()
     # Compute the expected Q values
     expected_state_action_values = (next_state_values * GAMMA) + reward_batch
+    # Clamp expected state action value to avoid loss explosion
+    expected_state_action_values = torch.clamp(expected_state_action_values, max=10000)
 
     # Compute Huber loss
     criterion = nn.SmoothL1Loss()
@@ -284,7 +286,7 @@ def train(env, board_size, num_episodes, check_point, num_piece='all piece', ren
         plotter = VisdomLinePlotter(today.strftime('%m%d%H%M'))
         
     for i_episode in range(1, num_episodes+1):
-        # print("i_ep", i_episode)
+        print("i_ep", i_episode)
         # Initialize the environment and state
         state = get_torch_screen(env.reset())
         # print("state shape", state.shape)
