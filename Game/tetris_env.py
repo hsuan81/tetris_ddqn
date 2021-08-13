@@ -51,20 +51,20 @@ colors = [
 
 # Define the shapes of the single parts
 tetris_shapes = [
-    # [[1, 1, 1],
-    #  [0, 1, 0]],
+    [[1, 1, 1],
+     [0, 1, 0]],
 
-    # [[0, 2, 2],
-    #  [2, 2, 0]],
+    [[0, 2, 2],
+     [2, 2, 0]],
 
-    # [[3, 3, 0],
-    #  [0, 3, 3]],
+    [[3, 3, 0],
+     [0, 3, 3]],
 
-    # [[4, 0, 0],
-    #  [4, 4, 4]],
+    [[4, 0, 0],
+     [4, 4, 4]],
 
-    # [[0, 0, 5],
-    #  [5, 5, 5]],
+    [[0, 0, 5],
+     [5, 5, 5]],
 
     [[6, 6, 6, 6]],
 
@@ -207,8 +207,8 @@ class TetrisApp(object):
 
     def add_cl_lines(self, n):
         """ Compute cleared line, score and level, and adjust the dropping spped as level goes up. """
-        linescores = [0, 40, 100, 300, 1200]  # Nintendo scoring system
-        # linescores = [0, 10, 40, 90, 160]
+        # linescores = [0, 40, 100, 300, 1200]  # Nintendo scoring system
+        linescores = [0, 10, 20, 30, 40]
         # linescores = [0, 0, 0, 0, 0]
         self.cl_lines = n
         # print("cleared line", self.cl_lines)

@@ -79,13 +79,14 @@ def select_action(observation, n_actions):
         """
         global steps_done
         steps_done += 1
-        state = observation
-        advantage = policy_net(state)
-        # print("q val", advantage)
-        soft = nn.Softmax(dim=-1)
-        prob = soft(advantage).cpu().detach().numpy()[0]
-        # prob = prob.cpu().detach().numpy()[0]
-        action = np.random.choice(n_actions, p=prob)
+        with torch.no_grad():
+            state = observation
+            advantage = policy_net(state)
+            # print("q val", advantage)
+            soft = nn.Softmax(dim=-1)
+            prob = soft(advantage).cpu().detach().numpy()[0]
+            # prob = prob.cpu().detach().numpy()[0]
+            action = np.random.choice(n_actions, p=prob)
 
         
         # if action == T.argmax(advantage).item():
@@ -332,7 +333,9 @@ def train(env, board_size, num_episodes, check_point, render=False, train_ver=0,
                 next_state = None
 
             # Store the transition in memory
-            memory.push(state, action, next_state, reward, done)
+            # memory.push(state, action, next_state, reward, done)
+            _temp_memory.append((state, action, next_state, reward, done))
+
 
             # Move to the next state
             state = next_state
@@ -342,11 +345,18 @@ def train(env, board_size, num_episodes, check_point, render=False, train_ver=0,
             # Put loss into separate list 
             losses.append(loss)
 
-            if not render:
-                plotter.plot("reward", "train", "reward per step", "step", t, reward.item())
-                plotter.plot("loss", "train", "loss per step", "step", t, loss)
+            # if not render:
+            #     plotter.plot("reward", "train", "reward per step", "step", t, reward.item())
+            #     plotter.plot("loss", "train", "loss per step", "step", t, loss)
 
             if done or total_lines > 100:
+                # @chi Memory more on success episodes
+                for temp in _temp_memory:
+                    memory.push(*temp)
+                for _ in range(5 * total_lines):
+                    for temp in _temp_memory:
+                        memory.push(*temp)
+
                 episode_durations.append(t + 1)
                 rewards.append(total_reward)
                 cleared_lines.append(total_lines)
@@ -499,7 +509,7 @@ if __name__ == '__main__':
         10: (216, 200)
     }
     # Train for Tetris
-    reward_ver = 14
+    reward_ver = 13
     # reward_ver = 10
     board_size = 8
     env = TetrisEnv()
@@ -511,12 +521,11 @@ if __name__ == '__main__':
     plt.ion()
 
     BATCH_SIZE = 32
-    GAMMA = 0.999  # 0.999
+    GAMMA = 0.5  # 0.999
     EPS_START = 0.9
     EPS_END = 0.05
     EPS_DECAY = 200  # 1000000 originally
-    TARGET_UPDATE = 200
-    MAX_STEP = 10000
+    TARGET_UPDATE = 10
     in_channels = 1  # due to frame stack
     lr = 0.001
     render = True
@@ -530,7 +539,7 @@ if __name__ == '__main__':
     # if gpu is to be used
     if torch.cuda.is_available():
         print("...GPU is using...")
-        BATCH_SIZE = 128
+        BATCH_SIZE = 64
         render = False
         print("batch size", BATCH_SIZE)
         print("render", render)
@@ -578,7 +587,7 @@ if __name__ == '__main__':
     # Training and testing
     plt.ion()
     plt.figure(figsize=(15, 10))
-    num_episodes = 1000
+    num_episodes = 5000
     check_point = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1500, 2000, 2500,
             3000, 5000, 10000, 30000, 50000, 100000, 300000, 500000]
     record_point = [100, 150, 250, 350, 450, 600, 1000, 2000, 3500, num_episodes-50]
