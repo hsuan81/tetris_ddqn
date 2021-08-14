@@ -258,7 +258,11 @@ def train(env, board_size, num_episodes, check_point, num_piece='all piece', ren
             'num of piece: {}'.format(num_piece), 
             'train ver: {}'.format(train_ver),
             'start episode: {}'.format(start_episode),
-            'resume train: {}'.format(resume_train)]
+            'resume train: {}'.format(resume_train),
+            'batch size: {}'.format(BATCH_SIZE),
+            'gamma: {}'.format(GAMMA),
+            'target update: {}'.format(TARGET_UPDATE),
+            'lr: {}'.format(lr)]
     with open(path + '/parameter.txt', 'w') as f:
         f.writelines('\n'.join(para))
 
