@@ -550,6 +550,7 @@ if __name__ == '__main__':
     in_channels = 1  # due to frame stack
     lr = 0.001
     render = True
+    use_GPU = True
     
 
 
@@ -557,14 +558,15 @@ if __name__ == '__main__':
     screen_shape = env.shape  # the board size
     print("screen shape", screen_shape)
 
+    
+    device = torch.device("cuda" if torch.cuda.is_available() and use_GPU else "cpu")
     # if gpu is to be used
-    if torch.cuda.is_available():
+    if torch.cuda.is_available() and use_GPU:
         print("...GPU is using...")
         BATCH_SIZE = 64
         render = False
         print("batch size", BATCH_SIZE)
         print("render", render)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Code and hyperparameter for CartPole
     # env.reset()
