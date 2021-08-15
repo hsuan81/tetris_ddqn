@@ -638,7 +638,7 @@ class TetrisApp(object):
             new_fit = a * agg_height + b * lines + c * holes + d * bumpiness
         elif ver == 0:
             # cleared lines
-            new_fit = 10 * lines
+            new_fit = 0
         elif ver == 1:
             # different coefficient for genetic algorithm
             new_fit = a * agg_height + b * lines + d * holes + c * bumpiness
@@ -690,7 +690,7 @@ class TetrisApp(object):
         # rew = new_fit - self.fitness_val
         rew = new_fit
         self.fitness_val = new_fit
-        return rew  + lines
+        return rew
 
     def _combo_actions(self, move):
         if move == 0:
@@ -1464,7 +1464,7 @@ if __name__ == '__main__':
     if FRAMESTACK:
         game = TetrisEnv()
         game = CropObservation(game, reduce_pixel=True, crop=True, board_width=cols)
-        game = HeuristicReward(game, ver=13)
+        game = HeuristicReward(game, ver=0)
         game = TetrisPreprocessing(game, frame_skip=0, grayscale_obs=True, grayscale_newaxis=False, scale_obs=False)
         # game = FrameStack(game,4)
         vid = video_recorder.VideoRecorder(game,path="./recording/vid_test.mp4")
