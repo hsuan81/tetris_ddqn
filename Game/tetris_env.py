@@ -157,6 +157,7 @@ class TetrisApp(object):
         self.cl_lines = 0
         self.fitness_val = 0
         self.filled = 0  # Grids filled within the 2-row size window
+        self.last_min_height = 0  # The previous min heigh 
         self.stone_change = False
         self.gameover = False
         self.paused = False
@@ -386,6 +387,21 @@ class TetrisApp(object):
             # print("row value", value)
         return value
 
+    def bottom_filled_cell(self):
+        sum_height, max_height, min_height = self.total_height()
+        print("min h", min_height)
+        stone_bottom_r = self.stone_y + len(self.stone) - 1
+        bottom_r = self.board_height - min_height - 1
+        print("stone bottom", stone_bottom_r)
+        print("bottom r", bottom_r)
+        if stone_bottom_r == bottom_r:
+            filled = len(self.stone[0]) - self.stone[-1].count(0)
+            # empty = self.board[bottom_r].count(0) - stone_bottom_filled
+            # filled = self.board_width - empty
+        else:
+            filled = 0
+        return filled
+
     def enhanced_falling_reward(self):
         value = 0
         # row_weight = [0] * (len(self.board) - 4) + [1, 1, 2, 2]  # simple version
@@ -413,6 +429,7 @@ class TetrisApp(object):
 
 
     def graph_value(self):
+        """ Return a value evaluating how well the pieces are stacked """
         value = 0
         w = 0
         board = copy.deepcopy(self.board[:-1])
@@ -552,12 +569,13 @@ class TetrisApp(object):
         '''Number of holes in the board (empty square with at least one block above it)'''
         holes = 0
         c = 0
-        real_r, real_cs = self._check_height()
+        # real_r, real_cs = self._check_height()
         for col in zip(*self.board):
-            if c in real_cs:
-                i = real_r
-            else:
-                i = 0
+            # if c in real_cs:
+            #     i = real_r
+            # else:
+            #     i = 0
+            i = 0
             while i < self.board_height and col[i] == 0:
                 i += 1
             holes += len([x for x in col[i+1:] if x == 0])
@@ -599,13 +617,13 @@ class TetrisApp(object):
         min_ys = []
 
         c = 0
-        real_r, real_cs = self._check_height()
+        # real_r, real_cs = self._check_height()
 
         for col in zip(*self.board):
-            if c in real_cs:
-                i = real_r
-            else:
-                i = 0
+            # if c in real_cs:
+            #     i = real_r
+            # else:
+            i = 0
             while i < self.board_height and col[i] == 0:
                 i += 1
             min_ys.append(i)
@@ -679,6 +697,7 @@ class TetrisApp(object):
             graph_val = self.graph_value()
             new_fit = graph_val / normal 
         
+
         elif ver == 13:
             falling_val = self.falling_reward()
             new_fit = falling_val
@@ -687,9 +706,19 @@ class TetrisApp(object):
             enhanced_falling_val = self.enhanced_falling_reward()
             new_fit = enhanced_falling_val
 
-        # rew = new_fit - self.fitness_val
-        rew = new_fit
+        elif ver == 15:
+            bottom_filled = self.bottom_filled_cell()
+            new_fit = 0.5 * bottom_filled
+        
+        # If action reward is used, returning reward is the fitness reward,
+        # otherwise, the reward is the difference of the current and last fitness value
+        if ver in [13, 14, 15]:
+            rew = new_fit
+        else:
+            rew = new_fit - self.fitness_val
+        
         self.fitness_val = new_fit
+        print("fitness val", self.fitness_val)
         return rew
 
     def _combo_actions(self, move):
@@ -1464,7 +1493,7 @@ if __name__ == '__main__':
     if FRAMESTACK:
         game = TetrisEnv()
         game = CropObservation(game, reduce_pixel=True, crop=True, board_width=cols)
-        game = HeuristicReward(game, ver=0)
+        game = HeuristicReward(game, ver=15)
         game = TetrisPreprocessing(game, frame_skip=0, grayscale_obs=True, grayscale_newaxis=False, scale_obs=False)
         # game = FrameStack(game,4)
         vid = video_recorder.VideoRecorder(game,path="./recording/vid_test.mp4")

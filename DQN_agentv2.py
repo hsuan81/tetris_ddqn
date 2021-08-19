@@ -71,7 +71,7 @@ def get_cart_location(screen_width):
 #     # Resize, and add a batch dimension (BCHW)
 #     return resize(screen).unsqueeze(0)
 
-def select_action(observation, n_actions):
+def select_soft_action(observation, n_actions):
         """
         This function uses softmax action selection with continousily decreasing temperature. During training I have tried many variations of the temperature 
         and found that a decreasing version of this is the best way to takle between exploration and exploitation.
@@ -96,25 +96,25 @@ def select_action(observation, n_actions):
 
         return torch.tensor([[action]], device=device)
 
-# def select_action(state, n_actions):
-#     global steps_done
-#     sample = random.random()
-#     eps_threshold = EPS_END + (EPS_START - EPS_END) * \
-#         math.exp(-1. * steps_done / EPS_DECAY)
-#     # print("step", steps_done)
-#     # print("eps threshold", eps_threshold)
-#     steps_done += 1
-#     if sample > eps_threshold:
-#         # return torch.tensor([[random.randrange(n_actions)]], device=device, dtype=torch.long)
-#         with torch.no_grad():
-#             # t.max(1) will return largest column value of each row.
-#             # second column on max result is index of where max element was
-#             # found, so we pick action with the larger expected reward.
-#             print("policy net", policy_net(state))
-#             # print("policy max", policy_net(state).max(1)[1].view(1, 1))
-#             return policy_net(state).max(1)[1].view(1, 1)
-#     else:
-#         return torch.tensor([[random.randrange(n_actions)]], device=device, dtype=torch.long)
+def select_action(state, n_actions):
+    global steps_done
+    sample = random.random()
+    eps_threshold = EPS_END + (EPS_START - EPS_END) * \
+        math.exp(-1. * steps_done / EPS_DECAY)
+    # print("step", steps_done)
+    # print("eps threshold", eps_threshold)
+    steps_done += 1
+    if sample > eps_threshold:
+        # return torch.tensor([[random.randrange(n_actions)]], device=device, dtype=torch.long)
+        with torch.no_grad():
+            # t.max(1) will return largest column value of each row.
+            # second column on max result is index of where max element was
+            # found, so we pick action with the larger expected reward.
+            print("policy net", policy_net(state))
+            # print("policy max", policy_net(state).max(1)[1].view(1, 1))
+            return policy_net(state).max(1)[1].view(1, 1)
+    else:
+        return torch.tensor([[random.randrange(n_actions)]], device=device, dtype=torch.long)
 
 
 
@@ -233,7 +233,7 @@ def optimize_model():
     optimizer.step()
     return loss.item()
 
-def train(env, board_size, num_episodes, check_point, num_piece='all piece', render=False, train_ver=0, record_point=None, start_episode=0, resume_train=False):
+def train(env, board_size, num_episodes, check_point, greedy=True, num_piece='all piece', render=False, train_ver=0, record_point=None, start_episode=0, resume_train=False):
     today = datetime.now()
     if not resume_train:
         saving_path = './model_saving/' + today.strftime('%m%d%H%M') + '_' + str(board_size)
@@ -257,6 +257,8 @@ def train(env, board_size, num_episodes, check_point, num_piece='all piece', ren
             'num of eps: {}'.format(num_episodes),
             'num of piece: {}'.format(num_piece), 
             'train ver: {}'.format(train_ver),
+            'greedy: {}'.format(greedy),
+            'prioritised experience: {}'.format(prioritised_exp),
             'start episode: {}'.format(start_episode),
             'resume train: {}'.format(resume_train),
             'batch size: {}'.format(BATCH_SIZE),
@@ -318,7 +320,10 @@ def train(env, board_size, num_episodes, check_point, num_piece='all piece', ren
                 state = state.unsqueeze(0)
             # print("state", state[0][3])
             # Select and perform an action
-            action = select_action(state, n_actions)
+            if greedy:
+                action = select_action(state, n_actions)
+            else:
+                action = select_soft_action(state, n_actions)
             # print("action", action)
             # action = env.sample()
             if render:
@@ -349,8 +354,8 @@ def train(env, board_size, num_episodes, check_point, num_piece='all piece', ren
                 next_state = None
 
             # Store the transition in memory
-            # memory.push(state, action, next_state, reward, done)
-            _temp_memory.append((state, action, next_state, reward, done))
+            memory.push(state, action, next_state, reward, done)
+            # _temp_memory.append((state, action, next_state, reward, done))
 
 
             # Move to the next state
@@ -367,11 +372,11 @@ def train(env, board_size, num_episodes, check_point, num_piece='all piece', ren
 
             if done or total_lines > 100:
                 # @chi Memory more on success episodes
-                for temp in _temp_memory:
-                    memory.push(*temp)
-                for _ in range(5 * total_lines):
-                    for temp in _temp_memory:
-                        memory.push(*temp)
+                # for temp in _temp_memory:
+                #     memory.push(*temp)
+                # for _ in range(5 * total_lines):
+                #     for temp in _temp_memory:
+                #         memory.push(*temp)
 
                 episode_durations.append(t + 1)
                 rewards.append(total_reward)
@@ -525,23 +530,30 @@ if __name__ == '__main__':
         8: (180, 150),
         10: (216, 200)
     }
+    reward_set = {
+        0: 'baseline',
+        2: 'bumpiness',
+        6: 'holes',
+        13: 'action reward',
+        14: 'enhanced action reward'
+    }
     # Train for Tetris
     reward_ver = 13
     # reward_ver = 10
-    board_size = 8
+    board_width = 8
     piece_set = {0: 'all piece',
                  1: 'one piece',
                  2: 'two pieces'}
     piece_code = 0
     env = TetrisEnv()
-    env = CropObservation(env, reduce_pixel=True, crop=True, board_width=board_size)  # 6x8: (150, 110) 10x12: (216, 200)
+    env = CropObservation(env, reduce_pixel=True, crop=True, board_width=board_width)  # 6x8: (150, 110) 10x12: (216, 200)
     env = HeuristicReward(env, ver=reward_ver)
     env = TetrisPreprocessing(env, frame_skip=0, grayscale_obs=True, grayscale_newaxis=False, scale_obs=False)
     # env = FrameStack(env,4)
 
     plt.ion()
 
-    BATCH_SIZE = 32
+    BATCH_SIZE = 64
     GAMMA = 0.999  # 0.999
     EPS_START = 0.9
     EPS_END = 0.05
@@ -549,8 +561,14 @@ if __name__ == '__main__':
     TARGET_UPDATE = 10
     in_channels = 1  # due to frame stack
     lr = 0.001
-    render = True
-    use_GPU = True
+    prioritised_exp = False
+    render = False
+    use_GPU = False
+    greedy = False
+    print("piece", piece_set[piece_code])
+    print("train", reward_set[reward_ver])
+    print("greedy", greedy)
+    print("prioritised", prioritised_exp)
     
 
 
@@ -610,7 +628,10 @@ if __name__ == '__main__':
     # Training and testing
     plt.ion()
     plt.figure(figsize=(15, 10))
-    num_episodes = 5000
+    if board_width == 8:
+        num_episodes = 5000
+    elif board_width == 10:
+        num_episodes = 10000
     check_point = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1500, 2000, 2500,
             3000, 5000, 10000, 30000, 50000, 100000, 300000, 500000]
     record_point = [100, 150, 250, 350, 450, 600, 1000, 2000, 3500, num_episodes-50]
@@ -637,7 +658,7 @@ if __name__ == '__main__':
     
 
     
-    train(env, board_size, num_episodes, check_point, num_piece=piece_set[piece_code], render=render, train_ver=reward_ver, record_point=record_point, start_episode=start_episode, resume_train=resume)
+    # train(env, board_width, num_episodes, check_point, num_piece=piece_set[piece_code], render=render, train_ver=reward_ver, record_point=record_point, start_episode=start_episode, resume_train=resume)
     
 
     
@@ -645,6 +666,6 @@ if __name__ == '__main__':
     # # restart env
     # train(env, board_size, num_episodes, check_point, render=True, train_ver=reward_ver,record_point=record_point)
     # torch.save(policy_net, "dqn_tetris_model")
-    # policy_net = torch.load("model_saving/08071515_8/DQN_1000_v13.pth")
+    policy_net = torch.load("model_saving/08161446_8/DQN_900_v13.pth")
 
-    # test(env, 5, policy_net, render=render)
+    test(env, 5, policy_net, render=render)
