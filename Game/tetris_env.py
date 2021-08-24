@@ -386,6 +386,21 @@ class TetrisApp(object):
             # print("row value", value)
         return value
 
+        def bottom_filled_cell(self):
+            sum_height, max_height, min_height = self.total_height()
+            print("min h", min_height)
+            stone_bottom_r = self.stone_y + len(self.stone) - 1
+            bottom_r = self.board_height - min_height - 1
+            print("stone bottom", stone_bottom_r)
+            print("bottom r", bottom_r)
+            if stone_bottom_r == bottom_r:
+                filled = len(self.stone[0]) - self.stone[-1].count(0)
+                # empty = self.board[bottom_r].count(0) - stone_bottom_filled
+                # filled = self.board_width - empty
+            else:
+                filled = 0
+            return filled
+
     def enhanced_falling_reward(self):
         value = 0
         # row_weight = [0] * (len(self.board) - 4) + [1, 1, 2, 2]  # simple version
@@ -552,12 +567,13 @@ class TetrisApp(object):
         '''Number of holes in the board (empty square with at least one block above it)'''
         holes = 0
         c = 0
-        real_r, real_cs = self._check_height()
+        # real_r, real_cs = self._check_height()
         for col in zip(*self.board):
-            if c in real_cs:
-                i = real_r
-            else:
-                i = 0
+            # if c in real_cs:
+            #     i = real_r
+            # else:
+            #     i = 0
+            i = 0
             while i < self.board_height and col[i] == 0:
                 i += 1
             holes += len([x for x in col[i+1:] if x == 0])
@@ -599,13 +615,13 @@ class TetrisApp(object):
         min_ys = []
 
         c = 0
-        real_r, real_cs = self._check_height()
+        # real_r, real_cs = self._check_height()
 
         for col in zip(*self.board):
-            if c in real_cs:
-                i = real_r
-            else:
-                i = 0
+            # if c in real_cs:
+            #     i = real_r
+            # else:
+            i = 0
             while i < self.board_height and col[i] == 0:
                 i += 1
             min_ys.append(i)
@@ -687,8 +703,17 @@ class TetrisApp(object):
             enhanced_falling_val = self.enhanced_falling_reward()
             new_fit = enhanced_falling_val
 
-        # rew = new_fit - self.fitness_val
-        rew = new_fit
+        elif ver == 15:
+            bottom_filled = self.bottom_filled_cell()
+            new_fit = 0.5 * bottom_filled
+
+        # If action reward is used, returning reward is the fitness reward,
+        # otherwise, the reward is the difference of the current and last fitness value
+        if ver in [13, 14, 15]:
+            rew = new_fit
+        else:
+            rew = new_fit - self.fitness_val
+        
         self.fitness_val = new_fit
         return rew
 
@@ -1432,13 +1457,13 @@ ACTION_LOOKUP = {
     0 : 'NONE',
     1 : 'LEFT',
     2 : 'RIGHT',
-    # 3 : 'DOWN',
     3 : 'ROTATE', # Used on defense to slide tackle the ball
-    # 5 : 'INSDROP',  # Used only by goalie to catch the ball
-    # 6 : 'ROTATE+LEFT',
-    # 7 : 'ROTATE+RIGHT',
-    # 8 : 'ROTATE+INSD',
-    # 9 : 'ROTATE+DOWN'
+    4 : 'DOWN',
+    5 : 'INSDROP',  # Used only by goalie to catch the ball
+    6 : 'ROTATE+LEFT',
+    7 : 'ROTATE+RIGHT',
+    8 : 'ROTATE+INSD',
+    9 : 'ROTATE+DOWN'
 }
 
 def print_table(ob):
@@ -1492,7 +1517,8 @@ if __name__ == '__main__':
             # action = game.action_space.sample()
             # action = 4
             # vid.capture_frame()
-            game.render()
+            # game.render()
+            print(x_t1)
             action = int(input())
             print("%i action %i" % (i,action))
             x_t2, reward1, done1 = game.step(action)

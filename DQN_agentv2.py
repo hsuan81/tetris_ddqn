@@ -71,7 +71,7 @@ def get_cart_location(screen_width):
 #     # Resize, and add a batch dimension (BCHW)
 #     return resize(screen).unsqueeze(0)
 
-def select_action(observation, n_actions):
+def select_soft_action(observation, n_actions):
         """
         This function uses softmax action selection with continousily decreasing temperature. During training I have tried many variations of the temperature 
         and found that a decreasing version of this is the best way to takle between exploration and exploitation.
@@ -96,25 +96,28 @@ def select_action(observation, n_actions):
 
         return torch.tensor([[action]], device=device)
 
-# def select_action(state, n_actions):
-#     global steps_done
-#     sample = random.random()
-#     eps_threshold = EPS_END + (EPS_START - EPS_END) * \
-#         math.exp(-1. * steps_done / EPS_DECAY)
-#     # print("step", steps_done)
-#     # print("eps threshold", eps_threshold)
-#     steps_done += 1
-#     if sample > eps_threshold:
-#         # return torch.tensor([[random.randrange(n_actions)]], device=device, dtype=torch.long)
-#         with torch.no_grad():
-#             # t.max(1) will return largest column value of each row.
-#             # second column on max result is index of where max element was
-#             # found, so we pick action with the larger expected reward.
-#             print("policy net", policy_net(state))
-#             # print("policy max", policy_net(state).max(1)[1].view(1, 1))
-#             return policy_net(state).max(1)[1].view(1, 1)
-#     else:
-#         return torch.tensor([[random.randrange(n_actions)]], device=device, dtype=torch.long)
+def random_action(n_actions):
+    return torch.tensor([[random.randrange(n_actions)]], device=device, dtype=torch.long)
+
+def select_action(state, n_actions):
+    global steps_done
+    sample = random.random()
+    eps_threshold = EPS_END + (EPS_START - EPS_END) * \
+        math.exp(-1. * steps_done / EPS_DECAY)
+    # print("step", steps_done)
+    # print("eps threshold", eps_threshold)
+    steps_done += 1
+    if sample > eps_threshold:
+        # return torch.tensor([[random.randrange(n_actions)]], device=device, dtype=torch.long)
+        with torch.no_grad():
+            # t.max(1) will return largest column value of each row.
+            # second column on max result is index of where max element was
+            # found, so we pick action with the larger expected reward.
+            # print("policy net", policy_net(state))
+            # print("policy max", policy_net(state).max(1)[1].view(1, 1))
+            return policy_net(state).max(1)[1].view(1, 1)
+    else:
+        return torch.tensor([[random.randrange(n_actions)]], device=device, dtype=torch.long)
 
 
 
@@ -213,13 +216,15 @@ def optimize_model():
     # Compute the expected Q values
     expected_state_action_values = (next_state_values * GAMMA) + reward_batch
     # Clamp expected state action value to avoid loss explosion
-    expected_state_action_values = torch.clamp(expected_state_action_values, max=10000)
+    # expected_state_action_values = torch.clamp(expected_state_action_values, max=10000)
 
     # Compute Huber loss
     criterion = nn.SmoothL1Loss()
     loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
 
     # Check q value approaching mechanism
+    # print("next state v", next_state_values)
+    # print("reward bath", reward_batch)
     # print("sa v", state_action_values)
     # print("expect sa v", expected_state_action_values)
     # print("loss", type(loss))
@@ -231,9 +236,12 @@ def optimize_model():
     for param in policy_net.parameters():
         param.grad.data.clamp_(-1, 1)
     optimizer.step()
-    return loss.item()
+    return (loss.item(), next_state_values, reward_batch, state_action_values.squeeze(1), expected_state_action_values)  
 
-def train(env, board_size, num_episodes, check_point, num_piece='all piece', render=False, train_ver=0, record_point=None, start_episode=0, resume_train=False):
+def reward_scaling(reward):
+    return reward / 20
+
+def train(env, board_size, num_episodes, check_point, greedy=True, prioritised=False, num_piece='all piece', render=False, train_ver=0, record_point=None, start_episode=0, resume_train=False, random_agent=False):
     today = datetime.now()
     if not resume_train:
         saving_path = './model_saving/' + today.strftime('%m%d%H%M') + '_' + str(board_size)
@@ -257,6 +265,9 @@ def train(env, board_size, num_episodes, check_point, num_piece='all piece', ren
             'num of eps: {}'.format(num_episodes),
             'num of piece: {}'.format(num_piece), 
             'train ver: {}'.format(train_ver),
+            'random agent: {}'.format(random_agent),
+            'greedy: {}'.format(greedy),
+            'prioritised experience: {}'.format(prioritised_exp),
             'start episode: {}'.format(start_episode),
             'resume train: {}'.format(resume_train),
             'batch size: {}'.format(BATCH_SIZE),
@@ -314,11 +325,21 @@ def train(env, board_size, num_episodes, check_point, num_piece='all piece', ren
                 print("record ends:", start_episode+i_episode)
         # print("episode", i_episode)
         for t in count():
+            # print("state before", state.shape)
             if state.dim() == 3:
                 state = state.unsqueeze(0)
+            # print("state after", state.shape)
             # print("state", state[0][3])
             # Select and perform an action
-            action = select_action(state, n_actions)
+            if random_agent:
+                action = random_action(n_actions)
+                # print("random", action)
+            elif greedy:
+                action = select_action(state, n_actions)
+                # print("greedy", action)
+            else: 
+                action = select_soft_action(state, n_actions)
+                # print("soft", action)
             # print("action", action)
             # action = env.sample()
             if render:
@@ -336,10 +357,13 @@ def train(env, board_size, num_episodes, check_point, num_piece='all piece', ren
             h_state = env.heuristic_state()
             total_lines = env.total_lines()
 
+            # Scaling reward
+            # reward = reward_scaling(reward)
+
             total_reward += reward
             each_reward.append(reward)
 
-            # turn reward to tensor form
+            # Convert reward to tensor form
             reward = torch.tensor([reward], device=device)
 
             # Observe new state
@@ -348,16 +372,26 @@ def train(env, board_size, num_episodes, check_point, num_piece='all piece', ren
             if done:
                 next_state = None
 
+            if not prioritised_exp:
             # Store the transition in memory
-            # memory.push(state, action, next_state, reward, done)
-            _temp_memory.append((state, action, next_state, reward, done))
+                memory.push(state, action, next_state, reward, done)
+            else:
+            # Naive prioritised experience replay
+                _temp_memory.append((state, action, next_state, reward, done))
 
 
             # Move to the next state
             state = next_state
 
             # Perform one step of the optimization (on the policy network)
-            loss = optimize_model()
+            # loss = optimize_model()
+            vs = optimize_model()
+            if vs is not None:
+                loss = vs[0]
+            else:
+                loss = vs
+            # Decay learning rate
+            # scheduler.step()
             # Put loss into separate list 
             losses.append(loss)
 
@@ -367,11 +401,22 @@ def train(env, board_size, num_episodes, check_point, num_piece='all piece', ren
 
             if done or total_lines > 100:
                 # @chi Memory more on success episodes
-                for temp in _temp_memory:
-                    memory.push(*temp)
-                for _ in range(5 * total_lines):
+                if prioritised_exp:
                     for temp in _temp_memory:
                         memory.push(*temp)
+                    for _ in range(10 * total_lines):
+                        for temp in _temp_memory:
+                            memory.push(*temp)
+
+                # For debugging
+                # if vs is not None:
+                #     print("next state v", vs[1])
+                #     print("reward bath", vs[2])
+                #     print("sa v", vs[3])
+                #     print("expect sa v", vs[4])
+                #     # print("loss", type(loss))
+                #     print("loss", vs[0])
+                #     print("diff", vs[3] - vs[4])
 
                 episode_durations.append(t + 1)
                 rewards.append(total_reward)
@@ -481,7 +526,7 @@ def test(env, n_episodes, policy_net, render=False, console=True):
         cl_lines = 0
         total_reward = 0.0
         for t in count():
-            q_vals = policy_net(state)
+            q_vals = policy_net(state).to(device)
             action = q_vals.max(1)[1].view(1,1)
 
             if render:
@@ -525,32 +570,48 @@ if __name__ == '__main__':
         8: (180, 150),
         10: (216, 200)
     }
+    reward_set = {
+        0: 'baseline',
+        2: 'bumpiness',
+        6: 'holes',
+        13: 'action reward',
+        14: 'enhanced action reward'
+    }
     # Train for Tetris
     reward_ver = 13
     # reward_ver = 10
-    board_size = 8
+    board_width = 8
     piece_set = {0: 'all piece',
-                 1: 'one piece',
+                 1: 'one I piece',
                  2: 'two pieces'}
     piece_code = 0
+    
     env = TetrisEnv()
-    env = CropObservation(env, reduce_pixel=True, crop=True, board_width=board_size)  # 6x8: (150, 110) 10x12: (216, 200)
+    env = CropObservation(env, reduce_pixel=True, crop=True, board_width=board_width)  # 6x8: (150, 110) 10x12: (216, 200)
     env = HeuristicReward(env, ver=reward_ver)
     env = TetrisPreprocessing(env, frame_skip=0, grayscale_obs=True, grayscale_newaxis=False, scale_obs=False)
     # env = FrameStack(env,4)
 
     plt.ion()
 
-    BATCH_SIZE = 32
+    BATCH_SIZE = 64
     GAMMA = 0.999  # 0.999
     EPS_START = 0.9
     EPS_END = 0.05
     EPS_DECAY = 200  # 1000000 originally
     TARGET_UPDATE = 10
     in_channels = 1  # due to frame stack
-    lr = 0.001
-    render = True
+    lr = 0.1
+    prioritised_exp = False
+    render = False
     use_GPU = True
+    greedy = True
+    random_agent = False
+    print("piece", piece_set[piece_code])
+    print("train", reward_set[reward_ver])
+    print("greedy", greedy)
+    print("prioritised", prioritised_exp)
+    print("random agent", random_agent)
     
 
 
@@ -602,6 +663,7 @@ if __name__ == '__main__':
     # target_net.eval()
   
     optimizer = optim.RMSprop(policy_net.parameters(), lr=lr)
+    # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.1)
     memory = ReplayBuffer(10000, screen_shape=screen_shape)
     resume = False
     start_episode = 0
@@ -610,22 +672,25 @@ if __name__ == '__main__':
     # Training and testing
     plt.ion()
     plt.figure(figsize=(15, 10))
-    num_episodes = 5000
+    if board_width == 8:
+        num_episodes = 10000
+    elif board_width == 10:
+        num_episodes = 10000
     check_point = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1500, 2000, 2500,
             3000, 5000, 10000, 30000, 50000, 100000, 300000, 500000]
     record_point = [100, 150, 250, 350, 450, 600, 1000, 2000, 3500, num_episodes-50]
     
     # Resume training setting
-    # resume = True
-    # saved_model = "model_saving/08110825_8/best_DQN_3000_train_v13.pth"
-    # ckpt = torch.load(saved_model)
-    # policy_net.load_state_dict(ckpt['model_state_dict'])
-    # target_net.load_state_dict(ckpt['target_state_dict'])
-    # optimizer.load_state_dict(ckpt['optimizer_state_dict'])
-    # lr = ckpt['learning rate']
-    # print("lr", lr)
-    # steps_done = ckpt['step']
-    # start_episode = 1000
+    resume = True
+    saved_model = "model_saving/08231418_8/best_DQN_5000_train_v13.pth"
+    ckpt = torch.load(saved_model)
+    policy_net.load_state_dict(ckpt['model_state_dict'])
+    target_net.load_state_dict(ckpt['target_state_dict'])
+    optimizer.load_state_dict(ckpt['optimizer_state_dict'])
+    lr = ckpt['learning rate']
+    print("lr", lr)
+    steps_done = ckpt['step']
+    start_episode = 5000
     
     # Check the loading of learning rate
     for param_group in optimizer.param_groups:
@@ -637,7 +702,9 @@ if __name__ == '__main__':
     
 
     
-    train(env, board_size, num_episodes, check_point, num_piece=piece_set[piece_code], render=render, train_ver=reward_ver, record_point=record_point, start_episode=start_episode, resume_train=resume)
+    train(env, board_width, num_episodes, check_point, greedy=greedy, prioritised=prioritised_exp, 
+        num_piece=piece_set[piece_code], render=render, train_ver=reward_ver, record_point=record_point, 
+        start_episode=start_episode, resume_train=resume, random_agent=random_agent)
     
 
     
@@ -645,6 +712,9 @@ if __name__ == '__main__':
     # # restart env
     # train(env, board_size, num_episodes, check_point, render=True, train_ver=reward_ver,record_point=record_point)
     # torch.save(policy_net, "dqn_tetris_model")
-    # policy_net = torch.load("model_saving/08071515_8/DQN_1000_v13.pth")
+    # use_GPU = True
+    # device = torch.device("cuda" if torch.cuda.is_available() and use_GPU else "cpu")
+    # print(device)
+    # policy_net = torch.load("model_saving/08221717_8/DQN_5000_v0.pth")
 
     # test(env, 5, policy_net, render=render)
