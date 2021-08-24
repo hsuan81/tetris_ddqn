@@ -157,7 +157,6 @@ class TetrisApp(object):
         self.cl_lines = 0
         self.fitness_val = 0
         self.filled = 0  # Grids filled within the 2-row size window
-        self.last_min_height = 0  # The previous min heigh 
         self.stone_change = False
         self.gameover = False
         self.paused = False
@@ -718,7 +717,7 @@ class TetrisApp(object):
             rew = new_fit - self.fitness_val
         
         self.fitness_val = new_fit
-        print("fitness val", self.fitness_val)
+        # print("fitness val", self.fitness_val)
         return rew
 
     def _combo_actions(self, move):
@@ -1518,11 +1517,11 @@ if __name__ == '__main__':
         # x_t1 = np.concatenate(x_t1, axis=1) 
         cv2.imwrite("framestack" + ".png", x_t1)
         for i in range(50):
-            # action = game.action_space.sample()
+            action = game.action_space.sample()
             # action = 4
             # vid.capture_frame()
             game.render()
-            action = int(input())
+            # action = int(input())
             print("%i action %i" % (i,action))
             x_t2, reward1, done1 = game.step(action)
             # print("count", (np.unique(x_t2, return_counts=True)))

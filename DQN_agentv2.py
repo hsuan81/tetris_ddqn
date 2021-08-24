@@ -96,6 +96,9 @@ def select_soft_action(observation, n_actions):
 
         return torch.tensor([[action]], device=device)
 
+def random_action(n_actions):
+    return torch.tensor([[random.randrange(n_actions)]], device=device, dtype=torch.long)
+
 def select_action(state, n_actions):
     global steps_done
     sample = random.random()
@@ -233,7 +236,7 @@ def optimize_model():
     optimizer.step()
     return loss.item()
 
-def train(env, board_size, num_episodes, check_point, greedy=True, num_piece='all piece', render=False, train_ver=0, record_point=None, start_episode=0, resume_train=False):
+def train(env, board_size, num_episodes, check_point, greedy=True, prioritised=False, num_piece='all piece', render=False, train_ver=0, record_point=None, start_episode=0, resume_train=False, random_agent=False):
     today = datetime.now()
     if not resume_train:
         saving_path = './model_saving/' + today.strftime('%m%d%H%M') + '_' + str(board_size)
@@ -320,10 +323,15 @@ def train(env, board_size, num_episodes, check_point, greedy=True, num_piece='al
                 state = state.unsqueeze(0)
             # print("state", state[0][3])
             # Select and perform an action
-            if greedy:
+            if random_agent:
+                action = random_action(n_actions)
+                print("random", action)
+            elif greedy:
                 action = select_action(state, n_actions)
+                print("greedy", action)
             else:
                 action = select_soft_action(state, n_actions)
+                print("soft", action)
             # print("action", action)
             # action = env.sample()
             if render:
@@ -538,13 +546,13 @@ if __name__ == '__main__':
         14: 'enhanced action reward'
     }
     # Train for Tetris
-    reward_ver = 13
+    reward_ver = 0
     # reward_ver = 10
     board_width = 8
     piece_set = {0: 'all piece',
                  1: 'one piece',
                  2: 'two pieces'}
-    piece_code = 0
+    piece_code = 1
     env = TetrisEnv()
     env = CropObservation(env, reduce_pixel=True, crop=True, board_width=board_width)  # 6x8: (150, 110) 10x12: (216, 200)
     env = HeuristicReward(env, ver=reward_ver)
@@ -562,13 +570,15 @@ if __name__ == '__main__':
     in_channels = 1  # due to frame stack
     lr = 0.001
     prioritised_exp = False
-    render = False
+    render = True
     use_GPU = False
     greedy = False
+    random_agent = True
     print("piece", piece_set[piece_code])
     print("train", reward_set[reward_ver])
     print("greedy", greedy)
     print("prioritised", prioritised_exp)
+    print("random agent", random_agent)
     
 
 
@@ -658,14 +668,15 @@ if __name__ == '__main__':
     
 
     
-    # train(env, board_width, num_episodes, check_point, num_piece=piece_set[piece_code], render=render, train_ver=reward_ver, record_point=record_point, start_episode=start_episode, resume_train=resume)
-    
+    train(env, board_width, num_episodes, check_point, greedy=greedy, prioritised=prioritised_exp, 
+        num_piece=piece_set[piece_code], render=render, train_ver=reward_ver, record_point=record_point, 
+        start_episode=start_episode, resume_train=resume, random_agent=random_agent)
 
     
     # reward_ver = 10
     # # restart env
     # train(env, board_size, num_episodes, check_point, render=True, train_ver=reward_ver,record_point=record_point)
     # torch.save(policy_net, "dqn_tetris_model")
-    policy_net = torch.load("model_saving/08161446_8/DQN_900_v13.pth")
+    # policy_net = torch.load("model_saving/08161446_8/DQN_900_v13.pth")
 
-    test(env, 5, policy_net, render=render)
+    # test(env, 5, policy_net, render=render)
