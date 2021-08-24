@@ -578,7 +578,7 @@ if __name__ == '__main__':
         14: 'enhanced action reward'
     }
     # Train for Tetris
-    reward_ver = 13
+    reward_ver = 0
     # reward_ver = 10
     board_width = 8
     piece_set = {0: 'all piece',

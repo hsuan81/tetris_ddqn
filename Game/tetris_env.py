@@ -428,6 +428,7 @@ class TetrisApp(object):
 
 
     def graph_value(self):
+        """ Return a value evaluating how well the pieces are stacked """
         value = 0
         w = 0
         board = copy.deepcopy(self.board[:-1])
@@ -695,6 +696,7 @@ class TetrisApp(object):
             graph_val = self.graph_value()
             new_fit = graph_val / normal 
         
+
         elif ver == 13:
             falling_val = self.falling_reward()
             new_fit = falling_val
@@ -706,7 +708,6 @@ class TetrisApp(object):
         elif ver == 15:
             bottom_filled = self.bottom_filled_cell()
             new_fit = 0.5 * bottom_filled
-
         # If action reward is used, returning reward is the fitness reward,
         # otherwise, the reward is the difference of the current and last fitness value
         if ver in [13, 14, 15]:
@@ -715,6 +716,7 @@ class TetrisApp(object):
             rew = new_fit - self.fitness_val
         
         self.fitness_val = new_fit
+        # print("fitness val", self.fitness_val)
         return rew
 
     def _combo_actions(self, move):
@@ -1489,7 +1491,7 @@ if __name__ == '__main__':
     if FRAMESTACK:
         game = TetrisEnv()
         game = CropObservation(game, reduce_pixel=True, crop=True, board_width=cols)
-        game = HeuristicReward(game, ver=0)
+        game = HeuristicReward(game, ver=15)
         game = TetrisPreprocessing(game, frame_skip=0, grayscale_obs=True, grayscale_newaxis=False, scale_obs=False)
         # game = FrameStack(game,4)
         vid = video_recorder.VideoRecorder(game,path="./recording/vid_test.mp4")
@@ -1514,7 +1516,7 @@ if __name__ == '__main__':
         # x_t1 = np.concatenate(x_t1, axis=1) 
         cv2.imwrite("framestack" + ".png", x_t1)
         for i in range(50):
-            # action = game.action_space.sample()
+            action = game.action_space.sample()
             # action = 4
             # vid.capture_frame()
             # game.render()
