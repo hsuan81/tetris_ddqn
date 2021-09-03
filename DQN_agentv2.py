@@ -41,6 +41,21 @@ resize = T.Compose([T.ToPILImage(),
                     T.Resize(40, interpolation=Image.CUBIC),
                     T.ToTensor()])
 
+BATCH_SIZE = 64
+GAMMA = 0.999  # 0.999
+EPS_START = 0.9
+EPS_END = 0.05
+EPS_DECAY = 200  # 1000000 originally
+TARGET_UPDATE = 10
+in_channels = 1  # due to frame stack
+lr = 0.1
+n_actions = 4
+
+global policy_net
+global target_net
+global memory
+
+
 def get_cart_location(screen_width):
     world_width = env.x_threshold * 2
     scale = screen_width / world_width
@@ -267,7 +282,7 @@ def train(env, board_size, num_episodes, check_point, greedy=True, prioritised=F
             'train ver: {}'.format(train_ver),
             'random agent: {}'.format(random_agent),
             'greedy: {}'.format(greedy),
-            'prioritised experience: {}'.format(prioritised_exp),
+            'prioritised experience: {}'.format(prioritised),
             'start episode: {}'.format(start_episode),
             'resume train: {}'.format(resume_train),
             'batch size: {}'.format(BATCH_SIZE),
@@ -372,7 +387,7 @@ def train(env, board_size, num_episodes, check_point, greedy=True, prioritised=F
             if done:
                 next_state = None
 
-            if not prioritised_exp:
+            if not prioritised:
             # Store the transition in memory
                 memory.push(state, action, next_state, reward, done)
             else:
@@ -401,7 +416,7 @@ def train(env, board_size, num_episodes, check_point, greedy=True, prioritised=F
 
             if done or total_lines > 100:
                 # @chi Memory more on success episodes
-                if prioritised_exp:
+                if prioritised:
                     for temp in _temp_memory:
                         memory.push(*temp)
                     for _ in range(10 * total_lines):

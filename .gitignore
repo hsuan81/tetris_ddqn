@@ -6,3 +6,5 @@ recording
 results
 *.csv
 *.pyc
+trained_data
+data_plot.py
